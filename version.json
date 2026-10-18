@@ -1,5 +1,5 @@
 {
-  "version": "1.3.0",
+  "version": "1.4.0",
   "released": "2026-10-18",
-  "notes": "Blutdruck nach Frühstück, Mittagessen oder Abendessen dokumentieren; sichere Übernahme historischer Blutdruckwerte, inkl. Patientenkontrolle und Duplikatschutz."
+  "notes": "Persönliches Profil mit Adresse, bearbeitbarer GdB-Fragebogen, farbige Blutdruck/Puls/Blutzucker-Grenzlinien und Warnstufen. Private Daten bleiben lokal."
 }

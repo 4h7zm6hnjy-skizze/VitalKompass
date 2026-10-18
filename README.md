@@ -1,4 +1,4 @@
-# VitalKompass 1.3.0
+# VitalKompass 1.4.0
 
 Private Blutzucker-, Blutdruck- und Gesundheits-Webapp (Progressive Web App / PWA), für große Schaltflächen und iPhone-Nutzung ausgelegt.
 
@@ -68,3 +68,12 @@ Stand: 18.10.2026. Kein zertifiziertes Medizinprodukt.
 - Neue Messwerte werden anhand von Messart, Datum, Uhrzeit und Zahlenwerten auf Duplikate geprüft, ohne vorhandene Bestätigungen zu überschreiben.
 - Handschriftliche Randnotizen wie „200 nach Fr.“ werden **nicht** als Blutdruckwerte gedeutet.
 - Quelle BP-Tagebuch ohne Jahr: 2026 ist eine **Annahme**. Das Originalfoto muss bestätigt werden.
+
+## Neu in Version 1.4.0
+
+- Sichtbares und bearbeitbares Patientenprofil (Name, Geburtsdatum, Anschrift, Telefonnummer, Krankenkasse, Hausarzt, Körperdaten). Private Angaben werden ausschließlich im verschlüsselten Browser-Speicher gehalten, niemals in `app.js`.
+- Eigene Grenzlinien mit farbiger Legende: Glukose nach Messsituation; systolischer und diastolischer Blutdruck getrennt; Ruhepuls. Allgemeine Grenzbereiche sind **keine automatisch berechneten persönlichen Therapieziele** und können angepasst werden.
+- Einstufung nach niedrig / Orientierungsbereich / erhöht / sehr auffällig, ungeprüfte Fotowerte werden ausdrücklich nicht automatisch klinisch interpretiert. Akute Warnsymptome erfordern unabhängig von Zahlen medizinische Hilfe.
+- GdB-Fragebogen einschließlich bereits festgestelltem GdB, Diabetesbehandlung, CPAP, dokumentierten Organfolgen und Einschränkungen. Qualitative Orientierung mit Quellen, kein automatisch berechneter Gesamt-GdB. PDF-Bericht über Drucken.
+- Keine Änderungen an verschlüsseltem Datenspeicherformat, bestehende Daten und Backups kompatibel.
+- Informationsquellen: https://academic.oup.com/eurheartj/article/45/38/3912/7741010 ; https://pmc.ncbi.nlm.nih.gov/articles/PMC11635034/ ; https://www.gesetze-im-internet.de/versmedv/anlage.html ; https://www.gesetze-im-internet.de/sgb_9_2018/__152.html ; https://www.elsa.nrw.de/elsa/cgi-bin/elsa.php
