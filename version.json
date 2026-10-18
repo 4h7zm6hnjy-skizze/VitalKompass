@@ -1,5 +1,5 @@
 {
-  "version": "1.8.2",
-  "released": "2026-10-18",
-  "notes": "Farbcodiertes iPhone-Design: Blutzucker türkis, Blutdruck blau, Labor violett, Medikamente orange, Vorsorge grün; überarbeitete Navigation und Abschnittskarten; unveränderte Datenbank und Gesundheitsfunktionen."
+  "version": "1.8.3",
+  "released": "2026-10-19",
+  "notes": "Messwertkurven in Blutzucker-, Blutdruck-, Puls- und Labor-Diagrammen durchgezogen; Referenz-/Grenzlinien gestrichelt; ungeprüfte Punkte als offene Kreise. Keine Datenmodelländerung."
 }

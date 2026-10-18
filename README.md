@@ -1,4 +1,4 @@
-# VitalKompass 1.8.2 – Farbdesign und Gesundheitsjournal
+# VitalKompass 1.8.3 – Durchgezogene Messwertlinien und farbliches Gesundheitsjournal
 
 ## Auslieferungsstatus
 - **Einsatzbereit als Webapp** nach erfolgreichem Update-Test auf deinem iPhone: 7-Tage-Blutdruckprofil, Datenqualität-Check, Vorperiodenvergleich, Labortrend, Arztbericht-PDF, Senioreneinstellung, persönlicher Notfallplan, Kalenderdatei (.ics) und Backup-Prüfung.
@@ -52,3 +52,15 @@ Installation: Unter Backup & Updates zuvor ein verschlüsseltes Backup erstellen
 - Keine Änderung an bestehendem lokalem Datenmodell, Backupformat oder Passwortverfahren.
 - Vor der Installation verschlüsseltes Backup erstellen. Nur die 5 öffentlichen Update-Dateien in den GitHub-Repository-Stamm laden. Keine privaten Gesundheitsdaten hochladen.
 - iPhone-Safari-Test mit echten Patientendaten steht aus; Ergebnis der synthetischen Browserprüfungen siehe Prüfbericht.
+
+
+## Version 1.8.3 – klare Linienführung
+
+- Blutzucker-, Blutdruck- und Pulsdiagramme zeichnen **alle tatsächlichen Messwerte als durchgezogene Kurven**; im bisherigen Stand wurden ungeprüfte Werte gestrichelt verbunden.
+- Referenz-/Grenzlinien bleiben **gestrichelt** und sind in der Legende ausdrücklich benannt.
+- Ungeprüfte Messwerte behalten eine eigene Kennzeichnung durch **offene Kreise** und ein Tooltip. Sie werden durch die neue Linienart nicht als bestätigt eingestuft.
+- Laborverläufe bleiben durchgezogen; ungeprüfte Laborpunkte erscheinen ebenfalls als offene Kreise. Für Laborparameter werden keine pauschalen Referenzlinien erfunden.
+- Die Linien sind zur besseren Lesbarkeit geringfügig verstärkt. Auch in aus der App erzeugten PDF-Berichten übernimmt der SVG-Konverter die Unterscheidung anhand der Linienart.
+- **Keine Änderung** am privaten Datenformat, der Verschlüsselung, gespeicherten Gesundheitswerten, der medizinischen Auswertungslogik oder der ESP32-Beta-Funktion.
+- Aktualisierung: Verschlüsseltes Backup außerhalb des Browsers aufbewahren, dann `app.js`, `style.css`, `sw.js`, `version.json`, `README.md` entpackt ins Stammverzeichnis hochladen.
+- Prüfung am echten iPhone weiterhin erforderlich.
