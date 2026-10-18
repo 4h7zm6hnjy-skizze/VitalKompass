@@ -1,4 +1,4 @@
-# VitalKompass 1.4.0
+# VitalKompass 1.5.0
 
 Private Blutzucker-, Blutdruck- und Gesundheits-Webapp (Progressive Web App / PWA), für große Schaltflächen und iPhone-Nutzung ausgelegt.
 
@@ -77,3 +77,18 @@ Stand: 18.10.2026. Kein zertifiziertes Medizinprodukt.
 - GdB-Fragebogen einschließlich bereits festgestelltem GdB, Diabetesbehandlung, CPAP, dokumentierten Organfolgen und Einschränkungen. Qualitative Orientierung mit Quellen, kein automatisch berechneter Gesamt-GdB. PDF-Bericht über Drucken.
 - Keine Änderungen an verschlüsseltem Datenspeicherformat, bestehende Daten und Backups kompatibel.
 - Informationsquellen: https://academic.oup.com/eurheartj/article/45/38/3912/7741010 ; https://pmc.ncbi.nlm.nih.gov/articles/PMC11635034/ ; https://www.gesetze-im-internet.de/versmedv/anlage.html ; https://www.gesetze-im-internet.de/sgb_9_2018/__152.html ; https://www.elsa.nrw.de/elsa/cgi-bin/elsa.php
+
+## Version 1.5.0
+
+- Neue Gesundheitsanalyse mit bestätigten Blutdruck-, Puls-, Blutzucker- und Laborwerten, nachvollziehbarem Ergebnis und zeitabhängigen Empfehlungen. Unbestätigte Foto-Importe fließen nicht in das Ergebnis ein.
+- Symptomtagebuch, dokumentierte Medikamenteneinnahmen mit rein beschreibendem Vier-Stunden-Zeitfenster, kontrollbasierte Erinnerungen bei geöffnetem Programm.
+- Druckbarer Arztbericht inklusive aktueller Analyse, Symptomen, bestätigten Laborbefunden, Medikamenten und GdB-Dokumentation.
+- Verschlüsselter GdB-Nachweisordner für kleine PDF-, JPG-, PNG- und TXT-Dokumente (einzeln max. 1,5 MB, gesamt 6 MB). Datensicherung empfohlen.
+- Kein medizinischer Diagnosescore, keine vollständige Medikamenten-Interaktionsprüfung, keine zuverlässigen Push-Erinnerungen bei geschlossener App.
+- Aktuelle Gesundheitsdaten bleiben im Browser-Tresor; keine Patientendaten im öffentlichen Projekt.
+
+### Quellen zur Einordnung
+
+- Deutsche Hochdruckliga: https://www.hochdruckliga.de/betroffene/bluthochdruck/bluthochdruck-bei-erwachsenen
+- ADA 2026: https://pmc.ncbi.nlm.nih.gov/articles/PMC12690178/
+- Versorgungsmedizin-Verordnung: https://www.gesetze-im-internet.de/versmedv/anlage.html

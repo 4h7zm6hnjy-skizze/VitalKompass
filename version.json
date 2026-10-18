@@ -1,5 +1,5 @@
 {
-  "version": "1.4.0",
+  "version": "1.5.0",
   "released": "2026-10-18",
-  "notes": "Persönliches Profil mit Adresse, bearbeitbarer GdB-Fragebogen, farbige Blutdruck/Puls/Blutzucker-Grenzlinien und Warnstufen. Private Daten bleiben lokal."
+  "notes": "Gesundheitsanalyse bestätigter Werte mit Ergebnis, Symptome, Einnahme-Messwert-Zeitfenster, Kontrollen, Arztbericht und GdB-Nachweisordner."
 }
