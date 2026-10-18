@@ -1,7 +1,13 @@
-const CACHE='vital-kompass-1.5.1';const FILES=['./','./index.html','./style.css','./app.js','./icon.svg','./icon-192.png','./icon-512.png','./manifest.webmanifest','./version.json'];
-self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(FILES)))});
-self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('vital-kompass-')&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim()))});
-self.addEventListener('fetch',e=>{if(e.request.method!=='GET'||new URL(e.request.url).origin!==self.location.origin)return;
-const url=new URL(e.request.url);if(url.pathname.endsWith('/version.json')||e.request.mode==='navigate'){e.respondWith(fetch(e.request,{cache:'no-store'}).then(r=>{if(r.ok&&e.request.mode==='navigate')caches.open(CACHE).then(c=>c.put(e.request,r.clone()));return r}).catch(()=>caches.match(e.request).then(r=>r||caches.match('./index.html'))));return}
-e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request).then(response=>{if(response.ok)caches.open(CACHE).then(c=>c.put(e.request,response.clone()));return response}))) });
+/* VitalKompass 1.5.2: network-first code updates, offline fallback. */
+const CACHE='vital-kompass-1.5.2';
+const FILES=['./','./index.html','./style.css','./pdf-export.js','./app.js','./icon.svg','./icon-192.png','./icon-512.png','./manifest.webmanifest','./version.json'];
+self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(FILES)).then(()=>self.skipWaiting())));
+self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('vital-kompass-')&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
+self.addEventListener('fetch',e=>{
+ const req=e.request;if(req.method!=='GET')return;
+ const url=new URL(req.url);if(url.origin!==self.location.origin)return;
+ const networkFirst=req.mode==='navigate'||['index.html','app.js','style.css','pdf-export.js','version.json','sw.js'].some(x=>url.pathname.endsWith('/'+x))||url.pathname.endsWith('/');
+ if(networkFirst){e.respondWith(fetch(req,{cache:'no-store'}).then(async response=>{if(response.ok){const cache=await caches.open(CACHE);await cache.put(req,response.clone())}return response}).catch(async()=>{const c=await caches.match(req);if(c)return c;if(req.mode==='navigate')return caches.match('./index.html');return Response.error()}));return}
+ e.respondWith(caches.match(req).then(c=>c||fetch(req).then(async response=>{if(response.ok)(await caches.open(CACHE)).put(req,response.clone());return response})));
+});
 self.addEventListener('message',e=>{if(e.data==='SKIP_WAITING')self.skipWaiting()});

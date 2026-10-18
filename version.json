@@ -1,5 +1,5 @@
 {
-  "version": "1.5.1",
+  "version": "1.5.2",
   "released": "2026-10-18",
-  "notes": "Gesundheitsanalyse bestätigter Werte mit Ergebnis, Symptome, Einnahme-Messwert-Zeitfenster, Kontrollen, Arztbericht und GdB-Nachweisordner."
+  "notes": "Direkter privater PDF-Export, responsive Tabellen, einspaltige Laborfelder, keine Pinch-Vergrößerung, verbesserte Offline-Updates."
 }

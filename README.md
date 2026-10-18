@@ -1,4 +1,4 @@
-# VitalKompass 1.5.1
+# VitalKompass 1.5.2
 
 Private Blutzucker-, Blutdruck- und Gesundheits-Webapp (Progressive Web App / PWA), für große Schaltflächen und iPhone-Nutzung ausgelegt.
 
@@ -107,3 +107,19 @@ Stand: 18.10.2026. Kein zertifiziertes Medizinprodukt.
 - Privat gespeicherte Allergien werden nur nach Import in der App angezeigt; keine patientenbezogene Stoffliste im öffentlichen Quellcode.
 - Backup und Patientenprofile werden vor Übernahme auf die erwarteten Datentypen geprüft; andere Patienten werden beim Wiederherstellen abgefangen.
 - Arzneimittelinformationen deutlich als allgemeine Auswahl statt individueller Vollständigkeitsprüfung gekennzeichnet.
+
+
+## Version 1.5.2 – iPhone-PDF und mobile Layoutreparatur
+
+- Eigene lokale PDF-Erstellung ohne Server oder Drittbibliotheken: PDF öffnen, herunterladen, teilen oder über den Browser drucken. Die erzeugte PDF selbst ist **unverschlüsselt** und muss vertraulich gespeichert werden.
+- PDF-Export enthält Tabellen, Zahlen und Diagramme als einfache Vektorkurven sowie Arztbericht, Notfallpass und GdB-Bericht; die interaktive Diagrammdarstellung bleibt zusätzlich in der App.
+- Browser-Druckdialog ist eine separate, weiterhin verfügbare Option und kann in iOS-PWAs eingeschränkt sein.
+- Tabellen in kleinen Bildschirmen werden als Karten mit beschrifteten Einträgen angezeigt, statt seitlich abzulaufen oder abgeschnitten zu werden.
+- Laborwerte werden mobil untereinander mit drei Eingabefeldern gezeigt.
+- Keine Pinch-Vergrößerung in der App (Wunsch des Nutzers); ausschließlich vertikales Scrollen. Betriebssystemseitige Bedienungshilfen sind davon unabhängig.
+- Der obere App-Balken ist mobil nicht mehr feststehend und kann den Bericht beim Scrollen nicht überlagern.
+- Offline-Cache aktualisiert App-Code und Styles bevorzugt aus dem Netz und aktiviert neue Versionen automatisch nach dem Laden; bei fehlender Verbindung Offline-Fallback.
+- Der private verschlüsselte Datenspeicher und die Importformate bleiben unverändert.
+- Kein nachträgliches Hinzufügen oder Überschreiben privater Patientendaten im öffentlichen Repository.
+
+Vor dem Update ein **verschlüsseltes Backup** erstellen. Wenn noch eine alte Version angezeigt wird: im Bereich „Backup & Updates“ nach Updates suchen und installieren; alternativ im Safari die Website aktualisieren. Die erste Aktualisierung kann etwas dauern, weil der alte Service Worker noch aktiv sein kann.

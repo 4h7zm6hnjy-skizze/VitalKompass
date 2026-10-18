@@ -18,3 +18,45 @@
 
 /* 1.5.0 Ergebnis und Arztbericht */
 .analysis-result{padding:18px;border-radius:14px;border:2px solid #d6e4ef;background:#f6fbff;margin-bottom:13px}.analysis-result strong{display:block;font-size:1.22rem}.analysis-result p{margin:8px 0 0}.analysis-result.status-urgent{border-color:#bb3448;background:#fff4f5}.analysis-result.status-high{border-color:#cb821c;background:#fff9ee}.analysis-result.status-watch{border-color:#7897b8}.analysis-flag{padding:13px 15px;border:1px solid #d8e3ec;border-radius:11px;margin:10px 0;background:white}.analysis-flag p{margin:8px 0}.analysis-flag strong{font-size:1.05rem}.nav button{min-height:46px}@media print {.analysis-flag,.analysis-result{break-inside:avoid;border:1px solid #444!important;background:#fff!important}.analysis-flag p{color:black}.analysis-result strong{color:#111}}
+
+/* 1.5.2: iPhone portrait, large text, and strict vertical scrolling. */
+html,body{max-width:100%;overflow-x:clip;touch-action:pan-y;-webkit-text-size-adjust:100%;}
+#root,.layout,#main,.panel,.table-wrap,.item,.metric,.notice,.authbox{min-width:0;max-width:100%;}
+.panel,.metric,.item,.notice,td,th,.labrow,.labrow .labtitle,.profile-highlight,.analysis-flag,.analysis-result{overflow-wrap:anywhere;word-break:normal;}
+svg,img,canvas{max-width:100%;height:auto}
+input,select,textarea,button{min-width:0;font-size:16px}
+.form-grid>*{min-width:0}
+.panel>h2,h1,h2,h3{overflow-wrap:break-word}
+@media screen and (max-width:700px){
+ .topbar{position:static;display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:'brand brand' 'version lock';align-items:center;gap:8px 10px}
+ .topbar .brand{grid-area:brand;min-width:0}
+ .topbar .version{grid-area:version;justify-self:start}
+ .topbar [data-action="lock"]{grid-area:lock}
+ .layout{padding:12px}
+ .panel{padding:15px;margin-bottom:14px}
+ .form-grid{grid-template-columns:1fr}
+ .labdetails{overflow:visible}
+ .labrow-head{display:none}
+ .labrow{grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;align-items:stretch;padding:12px 9px}
+ .labrow .labtitle{grid-column:1 / -1;line-height:1.45}
+ .labrow input{width:100%;min-width:0;font-size:16px;min-height:46px;padding:8px 6px}
+ .table-wrap{overflow:visible;border:0;border-radius:0}
+ .table-wrap table{display:block;min-width:0;width:100%;font-size:1rem}
+ .table-wrap thead{display:none}
+ .table-wrap tbody{display:grid;gap:11px;width:100%}
+ .table-wrap tbody tr{display:block;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff;padding:6px 11px;box-shadow:0 2px 8px #0a456312}
+ .table-wrap tbody td,.table-wrap tbody th{display:block;width:100%;min-width:0;border-bottom:1px solid #e7eff4;padding:9px 0;line-height:1.4;overflow-wrap:anywhere}
+ .table-wrap tbody td::before{content:attr(data-label);display:block;font-size:.78rem;letter-spacing:.01em;font-weight:800;color:#527089;margin-bottom:4px}
+ .table-wrap tbody td:last-child,.table-wrap tbody th:last-child{border-bottom:0}
+ .table-wrap tbody td button{max-width:100%;margin:3px 5px 3px 0;white-space:normal;min-height:42px}
+ .topbar .brand strong{font-size:1.2rem}
+ .chartwrap{overflow:hidden}
+ .chart{min-width:0}
+}
+@media screen and (max-width:360px){.nav{grid-template-columns:1fr 1fr}.nav button{font-size:.91rem;padding:9px 5px}.panel{padding:12px}}
+.pdf-dialog{position:fixed;inset:0;z-index:99;background:#0d253dc9;display:flex;align-items:center;justify-content:center;padding:12px;overflow-y:auto}
+.pdf-card{background:#fff;color:var(--ink);border-radius:18px;padding:21px;width:min(100%,520px);max-height:calc(100dvh - 28px);overflow-y:auto;box-shadow:0 8px 42px #0005;overflow-wrap:anywhere}
+.pdf-card h2{margin:0 0 10px}.pdf-card p{margin-bottom:13px}
+.pdf-buttons{display:grid;grid-template-columns:1fr;gap:9px;margin-bottom:15px}
+.pdf-buttons a,.pdf-buttons button{width:100%;display:flex;align-items:center;justify-content:center;min-height:48px;border-radius:11px;text-align:center;text-decoration:none;padding:11px 15px;font-weight:760}
+@media print{.pdf-dialog{display:none!important}.table-wrap{overflow:visible!important}.table-wrap table{display:table!important;min-width:0!important}.table-wrap thead{display:table-header-group!important}.table-wrap tbody{display:table-row-group!important}.table-wrap tbody tr{display:table-row!important;box-shadow:none!important}.table-wrap tbody td{display:table-cell!important}.table-wrap tbody td::before{display:none!important}}
