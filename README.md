@@ -1,4 +1,4 @@
-# VitalKompass 1.5.0
+# VitalKompass 1.5.1
 
 Private Blutzucker-, Blutdruck- und Gesundheits-Webapp (Progressive Web App / PWA), für große Schaltflächen und iPhone-Nutzung ausgelegt.
 
@@ -78,7 +78,7 @@ Stand: 18.10.2026. Kein zertifiziertes Medizinprodukt.
 - Keine Änderungen an verschlüsseltem Datenspeicherformat, bestehende Daten und Backups kompatibel.
 - Informationsquellen: https://academic.oup.com/eurheartj/article/45/38/3912/7741010 ; https://pmc.ncbi.nlm.nih.gov/articles/PMC11635034/ ; https://www.gesetze-im-internet.de/versmedv/anlage.html ; https://www.gesetze-im-internet.de/sgb_9_2018/__152.html ; https://www.elsa.nrw.de/elsa/cgi-bin/elsa.php
 
-## Version 1.5.0
+## Version 1.5.1
 
 - Neue Gesundheitsanalyse mit bestätigten Blutdruck-, Puls-, Blutzucker- und Laborwerten, nachvollziehbarem Ergebnis und zeitabhängigen Empfehlungen. Unbestätigte Foto-Importe fließen nicht in das Ergebnis ein.
 - Symptomtagebuch, dokumentierte Medikamenteneinnahmen mit rein beschreibendem Vier-Stunden-Zeitfenster, kontrollbasierte Erinnerungen bei geöffnetem Programm.
@@ -92,3 +92,18 @@ Stand: 18.10.2026. Kein zertifiziertes Medizinprodukt.
 - Deutsche Hochdruckliga: https://www.hochdruckliga.de/betroffene/bluthochdruck/bluthochdruck-bei-erwachsenen
 - ADA 2026: https://pmc.ncbi.nlm.nih.gov/articles/PMC12690178/
 - Versorgungsmedizin-Verordnung: https://www.gesetze-im-internet.de/versmedv/anlage.html
+
+
+## Fehlerkorrektur 1.5.1
+- Unbestätigte Mess- und Laborwerte fließen nicht in die bestätigte Monats-/Jahresstatistik.
+- Blutzucker ab 300 mg/dl wird unabhängig von einem höher gesetzten persönlichen Grenzwert als sehr hoch angezeigt.
+- Datum und Uhrzeit werden auf tatsächliche Gültigkeit geprüft.
+- Beim Import ergänzt die App die fehlenden Profildetails, auch wenn der Name vorher eingetragen wurde. Bestehende manuelle Änderungen bleiben erhalten.
+- Fehlende Laborreferenzbereiche werden in der Gesamteinschätzung ausdrücklich hervorgehoben.
+- Ein fehlgeschlagener Backup-Restore setzt den im Speicher gehaltenen Datensatz zurück.
+- Ältere Einträge ohne ausdrückliche Bestätigung gelten bis zur Prüfung als ungeprüft.
+- Keine privaten Patientendaten in den öffentlichen Dateien.
+
+- Privat gespeicherte Allergien werden nur nach Import in der App angezeigt; keine patientenbezogene Stoffliste im öffentlichen Quellcode.
+- Backup und Patientenprofile werden vor Übernahme auf die erwarteten Datentypen geprüft; andere Patienten werden beim Wiederherstellen abgefangen.
+- Arzneimittelinformationen deutlich als allgemeine Auswahl statt individueller Vollständigkeitsprüfung gekennzeichnet.
