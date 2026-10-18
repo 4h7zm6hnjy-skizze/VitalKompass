@@ -1,147 +1,30 @@
-# VitalKompass 1.5.3
+# VitalKompass 1.8.0 – Gesamtupdate 1.6 bis 1.8
 
-Private Blutzucker-, Blutdruck- und Gesundheits-Webapp (Progressive Web App / PWA), für große Schaltflächen und iPhone-Nutzung ausgelegt.
+## Auslieferungsstatus
+- **Einsatzbereit als Webapp** nach erfolgreichem Update-Test auf deinem iPhone: 7-Tage-Blutdruckprofil, Datenqualität-Check, Vorperiodenvergleich, Labortrend, Arztbericht-PDF, Senioreneinstellung, persönlicher Notfallplan, Kalenderdatei (.ics) und Backup-Prüfung.
+- **Beta / am echten Messgerät nicht geprüft:** Import der AES-256-GCM-geschützten Dateien aus einer selbst eingerichteten ESP32-C6-Bridge; keine direkte BLE-Kommunikation mit iPhone-Safari, keine Hintergrundsynchro. Externe Firmware ist kein Teil des öffentlichen Webapp-Updates und muss separat auf einem Mac kompiliert und getestet werden.
+- **Nicht enthalten:** Vollständige Arzneimittel-Wechselwirkungsdatenbank, medizinisch zertifizierte Diagnose/Notfall-Triage, Cloud- oder Push-Benachrichtigungen, vollständige Bildschirm-/Touch-Firmware für Waveshare CO5300/CST9220.
 
-## Sichere Nutzung
+## Sicherheit
+- GitHub-Paket enthält nur öffentliche Anwendungsdateien, keine eigenen/Patienten-Messdaten, keine persönlichen Transfer-Schlüssel oder WLAN-Passwörter.
+- Bestehende IndexedDB `vitalkompass-secure-v1` bleibt erhalten; ältere Datensätze werden bei Entsperrung um neutrale Standardfelder ergänzt. Keine automatische Datensatzlöschung.
+- Messungen aus ESP32-Export werden zunächst als nicht geprüft gespeichert. Vor der Übernahme den korrekten Patienten selbst bestätigen.
+- PDFs und ICS-Dateien sind **nicht verschlüsselt**; vertraulich speichern. Die direkt auf dem ESP32 per HTTP angebotene Datei muss selbst bereits durch AES-256-GCM verschlüsselt sein. Nicht in fremden WLANs verwenden.
+- Mit falschem Passwort gibt es keinen Datenrettungsweg – **vor Update verschlüsseltes Backup erstellen und außerhalb von Safari sicher verwahren**. Safari-Website-Daten NICHT löschen.
+- Die App ist keine zertifizierte medizinische Entscheidungssoftware. Zu medizinischen Beschwerden wird eine ärztliche Beurteilung benötigt, bei akuter Gefahr 112.
 
-1. Nur den **öffentlichen App-Ordner** oder die Datei `VitalKompass_PUBLIC_GitHub.zip` auf GitHub Pages veröffentlichen. Der Ordner enthält **keine** persönlichen Patientendaten.
-2. Die Website **über HTTPS** öffnen (z. B. über `https://<konto>.github.io/<repository>/`). Ein starker Passwortschutz wird bei der ersten Nutzung angelegt. Passwort sicher aufbewahren, es gibt keine Zurücksetzen-Funktion.
-3. Die **separate** persönliche Ralf-Importdatei auf dem persönlichen Gerät speichern. Sie enthält hochsensible Daten und darf **nicht** zu GitHub oder anderem öffentlichem Hosting hochgeladen werden.
-4. In der App `Backup & Updates > Privaten Notfallpass / historische Werte importieren` öffnen, die private Datei auswählen und importieren. Alle aus Fotos übertragenen Messwerte und Medikamentenpläne sind **ungeprüft** und müssen kontrolliert werden.
-5. Unter `Backup & Updates` nach der Einrichtung ein **verschlüsseltes Backup** herunterladen und mit bekanntem Passwort sicher aufbewahren. Browser-Datenlöschung kann alle lokalen App-Daten löschen.
-6. Auf dem iPhone in Safari `Teilen > Zum Home-Bildschirm` wählen, um die PWA mit eigenem Icon zu starten.
+## Installation
+1. In VitalKompass 1.5.3 unter Backup & Updates eine verschlüsselte Sicherung erstellen und die Datei außerhalb des Browsers aufbewahren.
+2. Die Dateien der **Update-ZIP** entpacken und im Stammverzeichnis des Repositories hochladen. Betroffen: `app.js`, `vkpro.js` (NEU), `index.html`, `style.css`, `sw.js`, `version.json`, `README.md`.
+3. Über GitHub Pages öffnen. Nach Bedarf in Backup & Updates „Update suchen“ und „Installieren“. Prüfen: Version 1.8.0, Analyse Pro, Vorsorge & Notfallplan, Blutzucker ESP32-Beta.
+4. Backup-Verifikation im Menü Backup & Updates testen. Danach Messwert-Vorschau kontrollieren.
 
-## Funktionsumfang
+## Einfache zeitliche Regeln
+- Das 7-Tage-Blutdruckprofil benutzt die letzten sieben Kalendertage: Vormittag vor 12 Uhr, Abend ab 17 Uhr; Messungen dazwischen sind dort ausgeschlossen (bleiben gespeichert). Das stellt **keinen vollständigen ärztlichen Messstandard** dar.
+- Vergleiche der letzten 30 Tage mit den davorliegenden 30 Tagen sind rein beschreibend; Datenlage bei weniger als drei bestätigten Werten je Zeitraum unzureichend.
+- Die Laborwerte werden nur bei gleichem Namen **und identischer Einheit** miteinander verglichen.
+- Ein Übereinstimmungsalarm von Medikament und Allergie ist nur ein **einfacher Textvergleich** – kein sicherer Ausschluss von Interaktionen.
+- Kalenderexport (.ics) benötigt einen manuellen Import auf dem iPhone; automatische Erinnerungen bei geschlossener Webapp sind nicht garantiert.
 
-- Blutzucker (Eingabe mg/dl oder mmol/l; interne Speicherung mg/dl; Nüchtern, vor und nach Essen)
-- Blutdruck, Puls; getrennte Kurven und Farb-Legenden; einstellbare Orientierungsgrenzen
-- Laborparameter (>100) einschließlich HbA1c, Insulin, Nierenwerte, Ferritin, Eisen, PSA gesamt/frei, Prostata und Urin
-- Medikamentenplan sowie statische Hinweise zu **ausgewählten** Risiken. Kein vollständiger automatischer Wechselwirkungscheck!
-- Allergien, Vorerkrankungen, Medikamentenliste, Kontakte und medizinische Historie im Notfallpass
-- Berichte für den laufenden Monat und das laufende Jahr, über die Browser-Druckfunktion als PDF speicherbar
-- Lokale AES-256-GCM-Verschlüsselung mit PBKDF2-SHA-256 (270.000 Iterationen) im Browser, IndexedDB
-- Passwortgeschützter verschlüsselter Backup-Export sowie Restore und privater Dateiimport
-- PWA-Cache für Offline-Nutzung nach der ersten vollständigen Onlinenutzung
-- Update-Suche via `version.json` und Service Worker: **nur wenn eine neue App-Version tatsächlich online veröffentlicht wurde**
-- Allgemeine Krankenkassenleistungen mit offiziellen Links und einer kopierbaren Musteranfrage
-
-## Grenzen
-
-- Die App ersetzt weder ärztliche Therapieanweisungen noch eine verbindliche Interaktionsdatenbank. Medikamente nicht aufgrund der App wechseln, starten oder absetzen.
-- Medizinische Alarmgrenzen sind Orientierungswerte. Grenzwerte für eine konkrete Person müssen ärztlich angepasst werden.
-- Referenzbereiche für Laborparameter müssen aus dem jeweiligen Befund übernommen werden. Unbekannte Referenzbereiche bleiben unbekannt.
-- Die Angaben aus dem Foto wurden nicht unabhängig überprüft. Auf der handschriftlichen Liste steht `mmol/l`, die Werte um 100–200 sind aber vermutlich `mg/dl`. **Erst anhand des Original-Messgeräts bestätigen!** Uhrzeiten erscheinen in der Spalte `Insulin` und wurden nur als Uhrzeiten, nicht als Insulineinheiten importiert.
-- Die Karte mit Blutgruppe im Notfallpass ersetzt keinen aktuellen Transfusionsbefund.
-- Medizinische Links benötigen Internet; die App-Funktionen laufen nach Laden des PWA-Cache offline.
-- PDF-Export erfolgt über `Drucken` → `Als PDF sichern`; keine externe PDF-Bibliothek oder Server notwendig.
-- **Kein Hintergrundabgleich** von Arzneimitteln, Sozialrecht, Preisen oder Kassenentscheidungen. Die Leistungen sind generelle Hinweise, Anträge werden nicht an eine Versicherung gesendet.
-- Das Browser-Passwort schützt ruhende App-Daten, schützt aber nicht gegen eine kompromittierte Gerätesoftware oder aktive Browser-Erweiterungen.
-
-## Updates für Entwickler
-
-1. `app.js` Versionskonstante, `version.json` und Service Worker Cache-Key (`sw.js`) gemeinsam erhöhen.
-2. Die geänderten **öffentlichen** Dateien auf GitHub Pages hochladen.
-3. In der App `Backup & Updates > Update suchen` und ggf. `Update installieren` ausführen.
-
-## Technisches
-
-Statische, externe-bibliotheksfreie HTML/CSS/JS-Anwendung. Kein Build-System nötig. Veröffentlichen über HTTPS. Keine personenbezogenen Daten im öffentlichen Projektordner.
-
-Stand: 18.10.2026. Kein zertifiziertes Medizinprodukt.
-
-## Version 1.2.0 (18.10.2026)
-
-- Neue **PSA-Schnelleingabe** mit Gesamt-PSA, freiem PSA und bei vorhandenen Werten automatisch berechnetem Verhältnis. Kein pauschaler Grenzwert.
-- **Patientenabgleich bei Importen:** Ein Import muss den Patienten namentlich nennen; eine abweichende Identität oder ein widersprechendes Geburtsdatum werden abgewiesen. Anonyme Laborimporte werden abgewiesen.
-- Bereits importierte Laborwerte können nach Abgleich mit dem Original bestätigt/korrigiert werden.
-- Die Blutzucker-Kurven verbinden jetzt Werte derselben Messsituation. Puls erscheint zusätzlich in der Monats- und Jahresstatistik.
-- **Keine Befunde einer anderen Person** in öffentlichen App-Dateien oder der ausgelieferten privaten Ralf-Datei.
-- Versionsnummer in App, Versionsdatei und Service-Worker-Cache konsistent.
-
-**Privatsphäre:** Die Datei mit persönlichen Notfalldaten und Laboren ist absichtlich *nicht* Bestandteil dieses ZIP-Archivs. Sie muss ausschließlich innerhalb der laufenden App über die lokale Importfunktion verarbeitet werden. Das JSON ist vor dem Import noch nicht verschlüsselt; entsprechend vertraulich behandeln und nach Erzeugung eines verschlüsselten Backups sicher verwahren.
-
-## Version 1.3.0 (18.10.2026)
-
-- Blutdruck: Mahlzeitenbezug mit 7 Optionen, z. B. „Nach dem Frühstück“, „Nach dem Mittagessen“ und „Nach dem Abendessen“.
-- Die Messwerttabelle und Statistik-Ausdrucke zeigen den Mahlzeitenbezug.
-- Private Patientendatei kann historische Blutdruckmessungen einlesen; neu hinzugekommene Werte werden vor Kontrolle als „Foto: noch prüfen“ markiert.
-- Neue Messwerte werden anhand von Messart, Datum, Uhrzeit und Zahlenwerten auf Duplikate geprüft, ohne vorhandene Bestätigungen zu überschreiben.
-- Handschriftliche Randnotizen wie „200 nach Fr.“ werden **nicht** als Blutdruckwerte gedeutet.
-- Quelle BP-Tagebuch ohne Jahr: 2026 ist eine **Annahme**. Das Originalfoto muss bestätigt werden.
-
-## Neu in Version 1.4.0
-
-- Sichtbares und bearbeitbares Patientenprofil (Name, Geburtsdatum, Anschrift, Telefonnummer, Krankenkasse, Hausarzt, Körperdaten). Private Angaben werden ausschließlich im verschlüsselten Browser-Speicher gehalten, niemals in `app.js`.
-- Eigene Grenzlinien mit farbiger Legende: Glukose nach Messsituation; systolischer und diastolischer Blutdruck getrennt; Ruhepuls. Allgemeine Grenzbereiche sind **keine automatisch berechneten persönlichen Therapieziele** und können angepasst werden.
-- Einstufung nach niedrig / Orientierungsbereich / erhöht / sehr auffällig, ungeprüfte Fotowerte werden ausdrücklich nicht automatisch klinisch interpretiert. Akute Warnsymptome erfordern unabhängig von Zahlen medizinische Hilfe.
-- GdB-Fragebogen einschließlich bereits festgestelltem GdB, Diabetesbehandlung, CPAP, dokumentierten Organfolgen und Einschränkungen. Qualitative Orientierung mit Quellen, kein automatisch berechneter Gesamt-GdB. PDF-Bericht über Drucken.
-- Keine Änderungen an verschlüsseltem Datenspeicherformat, bestehende Daten und Backups kompatibel.
-- Informationsquellen: https://academic.oup.com/eurheartj/article/45/38/3912/7741010 ; https://pmc.ncbi.nlm.nih.gov/articles/PMC11635034/ ; https://www.gesetze-im-internet.de/versmedv/anlage.html ; https://www.gesetze-im-internet.de/sgb_9_2018/__152.html ; https://www.elsa.nrw.de/elsa/cgi-bin/elsa.php
-
-## Version 1.5.1
-
-- Neue Gesundheitsanalyse mit bestätigten Blutdruck-, Puls-, Blutzucker- und Laborwerten, nachvollziehbarem Ergebnis und zeitabhängigen Empfehlungen. Unbestätigte Foto-Importe fließen nicht in das Ergebnis ein.
-- Symptomtagebuch, dokumentierte Medikamenteneinnahmen mit rein beschreibendem Vier-Stunden-Zeitfenster, kontrollbasierte Erinnerungen bei geöffnetem Programm.
-- Druckbarer Arztbericht inklusive aktueller Analyse, Symptomen, bestätigten Laborbefunden, Medikamenten und GdB-Dokumentation.
-- Verschlüsselter GdB-Nachweisordner für kleine PDF-, JPG-, PNG- und TXT-Dokumente (einzeln max. 1,5 MB, gesamt 6 MB). Datensicherung empfohlen.
-- Kein medizinischer Diagnosescore, keine vollständige Medikamenten-Interaktionsprüfung, keine zuverlässigen Push-Erinnerungen bei geschlossener App.
-- Aktuelle Gesundheitsdaten bleiben im Browser-Tresor; keine Patientendaten im öffentlichen Projekt.
-
-### Quellen zur Einordnung
-
-- Deutsche Hochdruckliga: https://www.hochdruckliga.de/betroffene/bluthochdruck/bluthochdruck-bei-erwachsenen
-- ADA 2026: https://pmc.ncbi.nlm.nih.gov/articles/PMC12690178/
-- Versorgungsmedizin-Verordnung: https://www.gesetze-im-internet.de/versmedv/anlage.html
-
-
-## Fehlerkorrektur 1.5.1
-- Unbestätigte Mess- und Laborwerte fließen nicht in die bestätigte Monats-/Jahresstatistik.
-- Blutzucker ab 300 mg/dl wird unabhängig von einem höher gesetzten persönlichen Grenzwert als sehr hoch angezeigt.
-- Datum und Uhrzeit werden auf tatsächliche Gültigkeit geprüft.
-- Beim Import ergänzt die App die fehlenden Profildetails, auch wenn der Name vorher eingetragen wurde. Bestehende manuelle Änderungen bleiben erhalten.
-- Fehlende Laborreferenzbereiche werden in der Gesamteinschätzung ausdrücklich hervorgehoben.
-- Ein fehlgeschlagener Backup-Restore setzt den im Speicher gehaltenen Datensatz zurück.
-- Ältere Einträge ohne ausdrückliche Bestätigung gelten bis zur Prüfung als ungeprüft.
-- Keine privaten Patientendaten in den öffentlichen Dateien.
-
-- Privat gespeicherte Allergien werden nur nach Import in der App angezeigt; keine patientenbezogene Stoffliste im öffentlichen Quellcode.
-- Backup und Patientenprofile werden vor Übernahme auf die erwarteten Datentypen geprüft; andere Patienten werden beim Wiederherstellen abgefangen.
-- Arzneimittelinformationen deutlich als allgemeine Auswahl statt individueller Vollständigkeitsprüfung gekennzeichnet.
-
-
-## Version 1.5.2 – iPhone-PDF und mobile Layoutreparatur
-
-- Eigene lokale PDF-Erstellung ohne Server oder Drittbibliotheken: PDF öffnen, herunterladen, teilen oder über den Browser drucken. Die erzeugte PDF selbst ist **unverschlüsselt** und muss vertraulich gespeichert werden.
-- PDF-Export enthält Tabellen, Zahlen und Diagramme als einfache Vektorkurven sowie Arztbericht, Notfallpass und GdB-Bericht; die interaktive Diagrammdarstellung bleibt zusätzlich in der App.
-- Browser-Druckdialog ist eine separate, weiterhin verfügbare Option und kann in iOS-PWAs eingeschränkt sein.
-- Tabellen in kleinen Bildschirmen werden als Karten mit beschrifteten Einträgen angezeigt, statt seitlich abzulaufen oder abgeschnitten zu werden.
-- Laborwerte werden mobil untereinander mit drei Eingabefeldern gezeigt.
-- Keine Pinch-Vergrößerung in der App (Wunsch des Nutzers); ausschließlich vertikales Scrollen. Betriebssystemseitige Bedienungshilfen sind davon unabhängig.
-- Der obere App-Balken ist mobil nicht mehr feststehend und kann den Bericht beim Scrollen nicht überlagern.
-- Offline-Cache aktualisiert App-Code und Styles bevorzugt aus dem Netz und aktiviert neue Versionen automatisch nach dem Laden; bei fehlender Verbindung Offline-Fallback.
-- Der private verschlüsselte Datenspeicher und die Importformate bleiben unverändert.
-- Kein nachträgliches Hinzufügen oder Überschreiben privater Patientendaten im öffentlichen Repository.
-
-Vor dem Update ein **verschlüsseltes Backup** erstellen. Wenn noch eine alte Version angezeigt wird: im Bereich „Backup & Updates“ nach Updates suchen und installieren; alternativ im Safari die Website aktualisieren. Die erste Aktualisierung kann etwas dauern, weil der alte Service Worker noch aktiv sein kann.
-
-## Version 1.5.3 – ohne Drittanbieter-App (18.10.2026)
-
-- Fünf Diagrammzeiträume bei Blutzucker, Blutdruck und Puls: **Tag, Woche, Monat, Jahr, letzte 10 Jahre**.
-- Verlauf für einzelne Laborparameter mit Zeitraumwahl. Langzeitreihen werden verdichtet; einzelne Messungen werden nicht gelöscht.
-- Keine Anmeldung, kein Import und keine Verknüpfung mit einer externen Diabetes-App erforderlich.
-- Manuelle Blutzuckereingabe, private historische Messwert-Importe und verschlüsselte Datensicherung bleiben erhalten.
-- Die **ESP32-C6-Anbindung** ist ein separates Projekt: Diese 1.5.3-Version enthält noch **keine** fertig nutzbare BLE-WLAN-Geräteverbindung. Firmware und verschlüsselter Brückenimport sind getrennt zu installieren und am Gerät zu testen.
-- Das Accu-Chek Instant misst Blutzucker, nicht Blutdruck. Eine automatische Blutdruckübernahme ist in dieser Version nicht enthalten.
-
-### Installation auf GitHub Pages
-
-1. In der bestehenden App unter **Backup & Updates** vorher ein **verschlüsseltes Backup** erstellen.
-2. Die vier Dateien der Update-ZIP (`app.js`, `sw.js`, `version.json`, `README.md`) **entpackt** in das Stammverzeichnis des GitHub-Repositories hochladen; vorhandene Dateien ersetzen, dann **Commit changes**.
-3. Keine privaten JSON-, PDF- oder Messwertdateien zu GitHub hochladen.
-4. App in Safari neu öffnen und Versionsanzeige prüfen. Der Offline-Cache bekommt einen neuen eindeutigen Namen.
-
-### Grenzen
-
-- Bei der iPhone-Safari-Webapp ist die BLE-Verbindung ohne eine zusätzlich aufgebaute Bridge nicht direkt verfügbar. Eine automatische Synchronisation wird für Version 1.5.3 daher nicht behauptet.
-- Vorhandene lokale Daten liegen verschlüsselt im Browser. Sie werden bei einem reinen öffentlichen Update nicht absichtlich geändert, können aber durch Zurücksetzen der Website-Daten verloren gehen: Backup aufbewahren.
-- Medizinische Warnlinien dienen der Orientierung und ersetzen keine ärztlich festgelegten Zielwerte.
+## Grenzen beim Geräteimport
+Das vorhandene ESP32-Firmware-BETA-Paket ist Entwicklungsquellcode, kein geprüftes fertiges Produkt und nicht automatisch kompatibel mit jeder Hardware-Revision des Waveshare ESP32-C6 Touch AMOLED 2.16. Kein Live-HTTPS-Zugriff von GitHub Pages auf das Geräte-AP zugesagt. Erst am echten Gerät über Mac kompilieren, koppeln, auslesen und mit Testwerten validieren. 

@@ -60,3 +60,11 @@ input,select,textarea,button{min-width:0;font-size:16px}
 .pdf-buttons{display:grid;grid-template-columns:1fr;gap:9px;margin-bottom:15px}
 .pdf-buttons a,.pdf-buttons button{width:100%;display:flex;align-items:center;justify-content:center;min-height:48px;border-radius:11px;text-align:center;text-decoration:none;padding:11px 15px;font-weight:760}
 @media print{.pdf-dialog{display:none!important}.table-wrap{overflow:visible!important}.table-wrap table{display:table!important;min-width:0!important}.table-wrap thead{display:table-header-group!important}.table-wrap tbody{display:table-row-group!important}.table-wrap tbody tr{display:table-row!important;box-shadow:none!important}.table-wrap tbody td{display:table-cell!important}.table-wrap tbody td::before{display:none!important}}
+
+/* VitalKompass 1.8.0 – einfach bedienbare Schrift ohne Horizontal-Scroll */
+body.senior-mode{font-size:19px;line-height:1.65}
+body.senior-mode input,body.senior-mode select,body.senior-mode textarea,body.senior-mode button{font-size:18px;min-height:50px}
+body.senior-mode .nav button{min-height:58px;font-size:1.05rem}
+body.senior-mode .panel{line-height:1.65}
+body.senior-mode .section-note,body.senior-mode .chip{font-size:1rem}
+@media(max-width:700px){body.senior-mode .nav{grid-template-columns:repeat(2,minmax(0,1fr))}body.senior-mode .main-grid{grid-template-columns:1fr}}
