@@ -1,4 +1,4 @@
-# VitalKompass 1.8.1 – Gesamtupdate 1.6 bis 1.8
+# VitalKompass 1.8.2 – Farbdesign und Gesundheitsjournal
 
 ## Auslieferungsstatus
 - **Einsatzbereit als Webapp** nach erfolgreichem Update-Test auf deinem iPhone: 7-Tage-Blutdruckprofil, Datenqualität-Check, Vorperiodenvergleich, Labortrend, Arztbericht-PDF, Senioreneinstellung, persönlicher Notfallplan, Kalenderdatei (.ics) und Backup-Prüfung.
@@ -14,9 +14,9 @@
 - Die App ist keine zertifizierte medizinische Entscheidungssoftware. Zu medizinischen Beschwerden wird eine ärztliche Beurteilung benötigt, bei akuter Gefahr 112.
 
 ## Installation
-1. In VitalKompass 1.5.3 unter Backup & Updates eine verschlüsselte Sicherung erstellen und die Datei außerhalb des Browsers aufbewahren.
-2. Die Dateien der **Update-ZIP** entpacken und im Stammverzeichnis des Repositories hochladen. Betroffen: `app.js`, `vkpro.js` (NEU), `index.html`, `style.css`, `sw.js`, `version.json`, `README.md`.
-3. Über GitHub Pages öffnen. Nach Bedarf in Backup & Updates „Update suchen“ und „Installieren“. Prüfen: Version 1.8.0, Analyse Pro, Vorsorge & Notfallplan, Blutzucker ESP32-Beta.
+1. In der derzeit installierten VitalKompass-Version unter Backup & Updates eine verschlüsselte Sicherung erstellen und die Datei außerhalb des Browsers aufbewahren.
+2. Die fünf Dateien der **1.8.2-Update-ZIP** entpacken und im Stammverzeichnis des Repositories hochladen: `app.js`, `style.css`, `sw.js`, `version.json`, `README.md`. Andere Dateien bleiben erhalten.
+3. Über GitHub Pages öffnen. Nach Bedarf in Backup & Updates „Update suchen“ und „Installieren“. Prüfen: Version 1.8.2, farbige Navigation, Analyse Pro, Vorsorge & Notfallplan.
 4. Backup-Verifikation im Menü Backup & Updates testen. Danach Messwert-Vorschau kontrollieren.
 
 ## Einfache zeitliche Regeln
@@ -41,3 +41,14 @@ Das vorhandene ESP32-Firmware-BETA-Paket ist Entwicklungsquellcode, kein geprüf
 - **Nicht** auf einem echten iPhone oder ESP32 getestet. Keine zertifizierte medizinische Software.
 
 Installation: Unter Backup & Updates zuvor ein verschlüsseltes Backup erstellen, dann die geänderten öffentlichen Dateien ins Root des GitHub-Repos hochladen. Bestehende private Safari-/IndexedDB-Daten nicht löschen.
+
+
+## Version 1.8.2 – farblich strukturierte Oberfläche
+
+- Türkis = Blutzucker und Symptome; Blau = Blutdruck und Analysen; Violett = Labor, GdB und Nachweise; Orange = Medikamente und Einnahmen; Grün = Vorsorge und Termine; Rot kennzeichnet den Notfallpass.
+- Bereichsfarben dienen nur der Navigation. Medizinische Warnhinweise verwenden gesonderte, beschriftete Statusfelder; keine Einstufung aus der Dekorationsfarbe ableiten.
+- Navigation mit klarer aktiver Markierung, Übersichtskarten, farblicher Bereichsüberschrift und farbiger Startseiten-Schnellnavigation.
+- Responsive Darstellung für iPhone-Portrait; Senior-Modus bleibt vorhanden. Kein externes Icon-/Schrift-/Tracking-CDN.
+- Keine Änderung an bestehendem lokalem Datenmodell, Backupformat oder Passwortverfahren.
+- Vor der Installation verschlüsseltes Backup erstellen. Nur die 5 öffentlichen Update-Dateien in den GitHub-Repository-Stamm laden. Keine privaten Gesundheitsdaten hochladen.
+- iPhone-Safari-Test mit echten Patientendaten steht aus; Ergebnis der synthetischen Browserprüfungen siehe Prüfbericht.

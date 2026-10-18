@@ -1,5 +1,5 @@
 {
-  "version": "1.8.1",
+  "version": "1.8.2",
   "released": "2026-10-18",
-  "notes": "Sicherheitsaudit: PDF-Zwischendaten entfernen, HTML-Ausgaben absichern, sichere Backup/Wipe-Reihenfolge, patientengebundene Wiederherstellung, transaktionaler Privatimport, getrennte bestätigte/ungeprüfte Diagrammwerte, iPhone-Layoutprüfungen."
+  "notes": "Farbcodiertes iPhone-Design: Blutzucker türkis, Blutdruck blau, Labor violett, Medikamente orange, Vorsorge grün; überarbeitete Navigation und Abschnittskarten; unveränderte Datenbank und Gesundheitsfunktionen."
 }
