@@ -1,4 +1,4 @@
-# VitalKompass 1.2.0
+# VitalKompass 1.3.0
 
 Private Blutzucker-, Blutdruck- und Gesundheits-Webapp (Progressive Web App / PWA), für große Schaltflächen und iPhone-Nutzung ausgelegt.
 
@@ -59,3 +59,12 @@ Stand: 18.10.2026. Kein zertifiziertes Medizinprodukt.
 - Versionsnummer in App, Versionsdatei und Service-Worker-Cache konsistent.
 
 **Privatsphäre:** Die Datei mit persönlichen Notfalldaten und Laboren ist absichtlich *nicht* Bestandteil dieses ZIP-Archivs. Sie muss ausschließlich innerhalb der laufenden App über die lokale Importfunktion verarbeitet werden. Das JSON ist vor dem Import noch nicht verschlüsselt; entsprechend vertraulich behandeln und nach Erzeugung eines verschlüsselten Backups sicher verwahren.
+
+## Version 1.3.0 (18.10.2026)
+
+- Blutdruck: Mahlzeitenbezug mit 7 Optionen, z. B. „Nach dem Frühstück“, „Nach dem Mittagessen“ und „Nach dem Abendessen“.
+- Die Messwerttabelle und Statistik-Ausdrucke zeigen den Mahlzeitenbezug.
+- Private Patientendatei kann historische Blutdruckmessungen einlesen; neu hinzugekommene Werte werden vor Kontrolle als „Foto: noch prüfen“ markiert.
+- Neue Messwerte werden anhand von Messart, Datum, Uhrzeit und Zahlenwerten auf Duplikate geprüft, ohne vorhandene Bestätigungen zu überschreiben.
+- Handschriftliche Randnotizen wie „200 nach Fr.“ werden **nicht** als Blutdruckwerte gedeutet.
+- Quelle BP-Tagebuch ohne Jahr: 2026 ist eine **Annahme**. Das Originalfoto muss bestätigt werden.

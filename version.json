@@ -1,5 +1,5 @@
 {
-  "version": "1.2.0",
+  "version": "1.3.0",
   "released": "2026-10-18",
-  "notes": "PSA-Schnelleingabe, strikt patientengebundener Import, Laborprüfung, durchgehende Diagrammreihen, Pulsstatistik und Konsistenzprüfung."
+  "notes": "Blutdruck nach Frühstück, Mittagessen oder Abendessen dokumentieren; sichere Übernahme historischer Blutdruckwerte, inkl. Patientenkontrolle und Duplikatschutz."
 }
