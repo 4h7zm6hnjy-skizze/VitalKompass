@@ -1,4 +1,4 @@
-# VitalKompass 1.8.0 – Gesamtupdate 1.6 bis 1.8
+# VitalKompass 1.8.1 – Gesamtupdate 1.6 bis 1.8
 
 ## Auslieferungsstatus
 - **Einsatzbereit als Webapp** nach erfolgreichem Update-Test auf deinem iPhone: 7-Tage-Blutdruckprofil, Datenqualität-Check, Vorperiodenvergleich, Labortrend, Arztbericht-PDF, Senioreneinstellung, persönlicher Notfallplan, Kalenderdatei (.ics) und Backup-Prüfung.
@@ -28,3 +28,16 @@
 
 ## Grenzen beim Geräteimport
 Das vorhandene ESP32-Firmware-BETA-Paket ist Entwicklungsquellcode, kein geprüftes fertiges Produkt und nicht automatisch kompatibel mit jeder Hardware-Revision des Waveshare ESP32-C6 Touch AMOLED 2.16. Kein Live-HTTPS-Zugriff von GitHub Pages auf das Geräte-AP zugesagt. Erst am echten Gerät über Mac kompilieren, koppeln, auslesen und mit Testwerten validieren. 
+
+## Sicherheitspatch 1.8.1 (18.10.2026)
+
+- Patientenprofil: Telefon- und Arztangaben werden HTML-sicher ausgegeben.
+- PDF-Ausgabe: Die unverschlüsselte HTML-Zwischenkopie wird sofort entfernt. PDF-Objekt-URL und Dialog werden nach „Schließen“, „Sperren“ oder „Daten löschen“ freigegeben. Im iPhone für Ausdruck „PDF öffnen“ und den PDF-Betrachter nutzen.
+- Backup: Vor Export und Sperren wird auf noch laufende lokale Speichervorgänge gewartet. Wiederherstellung prüft bei vorhandenen Angaben zusätzlich das Geburtsdatum.
+- Privatimport: Eingaben werden in einer Arbeitskopie verarbeitet und nur nach erfolgreicher Validierung verschlüsselt übernommen.
+- Importe erlauben nur erwartete Felder in Messwerten/Medikamenten/Laboren; BP-Puls wird zusätzlich validiert.
+- Diagramme aggregieren bestätigte und unbestätigte Werte nicht länger zu einer gemeinsamen Zahl.
+- Offline-Cache: „vkpro.js“ wird in Onlinebetrieb wie andere App-Dateien bevorzugt aus dem Netz aktualisiert.
+- **Nicht** auf einem echten iPhone oder ESP32 getestet. Keine zertifizierte medizinische Software.
+
+Installation: Unter Backup & Updates zuvor ein verschlüsseltes Backup erstellen, dann die geänderten öffentlichen Dateien ins Root des GitHub-Repos hochladen. Bestehende private Safari-/IndexedDB-Daten nicht löschen.

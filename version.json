@@ -1,5 +1,5 @@
 {
-  "version": "1.8.0",
+  "version": "1.8.1",
   "released": "2026-10-18",
-  "notes": "Analyse Pro, 7-Tage-Blutdruckprofil, Messdaten-Qualität, Labortrend, Seniorenmodus, Notfallplan, Kalenderexport, Backup-Test und lokaler ESP32-C6-Beta-Import ohne Drittanbieter-App."
+  "notes": "Sicherheitsaudit: PDF-Zwischendaten entfernen, HTML-Ausgaben absichern, sichere Backup/Wipe-Reihenfolge, patientengebundene Wiederherstellung, transaktionaler Privatimport, getrennte bestätigte/ungeprüfte Diagrammwerte, iPhone-Layoutprüfungen."
 }
