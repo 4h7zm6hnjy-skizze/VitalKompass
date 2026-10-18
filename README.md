@@ -1,4 +1,4 @@
-# VitalKompass 1.5.2
+# VitalKompass 1.5.3
 
 Private Blutzucker-, Blutdruck- und Gesundheits-Webapp (Progressive Web App / PWA), für große Schaltflächen und iPhone-Nutzung ausgelegt.
 
@@ -123,3 +123,25 @@ Stand: 18.10.2026. Kein zertifiziertes Medizinprodukt.
 - Kein nachträgliches Hinzufügen oder Überschreiben privater Patientendaten im öffentlichen Repository.
 
 Vor dem Update ein **verschlüsseltes Backup** erstellen. Wenn noch eine alte Version angezeigt wird: im Bereich „Backup & Updates“ nach Updates suchen und installieren; alternativ im Safari die Website aktualisieren. Die erste Aktualisierung kann etwas dauern, weil der alte Service Worker noch aktiv sein kann.
+
+## Version 1.5.3 – ohne Drittanbieter-App (18.10.2026)
+
+- Fünf Diagrammzeiträume bei Blutzucker, Blutdruck und Puls: **Tag, Woche, Monat, Jahr, letzte 10 Jahre**.
+- Verlauf für einzelne Laborparameter mit Zeitraumwahl. Langzeitreihen werden verdichtet; einzelne Messungen werden nicht gelöscht.
+- Keine Anmeldung, kein Import und keine Verknüpfung mit einer externen Diabetes-App erforderlich.
+- Manuelle Blutzuckereingabe, private historische Messwert-Importe und verschlüsselte Datensicherung bleiben erhalten.
+- Die **ESP32-C6-Anbindung** ist ein separates Projekt: Diese 1.5.3-Version enthält noch **keine** fertig nutzbare BLE-WLAN-Geräteverbindung. Firmware und verschlüsselter Brückenimport sind getrennt zu installieren und am Gerät zu testen.
+- Das Accu-Chek Instant misst Blutzucker, nicht Blutdruck. Eine automatische Blutdruckübernahme ist in dieser Version nicht enthalten.
+
+### Installation auf GitHub Pages
+
+1. In der bestehenden App unter **Backup & Updates** vorher ein **verschlüsseltes Backup** erstellen.
+2. Die vier Dateien der Update-ZIP (`app.js`, `sw.js`, `version.json`, `README.md`) **entpackt** in das Stammverzeichnis des GitHub-Repositories hochladen; vorhandene Dateien ersetzen, dann **Commit changes**.
+3. Keine privaten JSON-, PDF- oder Messwertdateien zu GitHub hochladen.
+4. App in Safari neu öffnen und Versionsanzeige prüfen. Der Offline-Cache bekommt einen neuen eindeutigen Namen.
+
+### Grenzen
+
+- Bei der iPhone-Safari-Webapp ist die BLE-Verbindung ohne eine zusätzlich aufgebaute Bridge nicht direkt verfügbar. Eine automatische Synchronisation wird für Version 1.5.3 daher nicht behauptet.
+- Vorhandene lokale Daten liegen verschlüsselt im Browser. Sie werden bei einem reinen öffentlichen Update nicht absichtlich geändert, können aber durch Zurücksetzen der Website-Daten verloren gehen: Backup aufbewahren.
+- Medizinische Warnlinien dienen der Orientierung und ersetzen keine ärztlich festgelegten Zielwerte.

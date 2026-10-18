@@ -1,5 +1,5 @@
 {
-  "version": "1.5.2",
+  "version": "1.5.3",
   "released": "2026-10-18",
-  "notes": "Direkter privater PDF-Export, responsive Tabellen, einspaltige Laborfelder, keine Pinch-Vergrößerung, verbesserte Offline-Updates."
+  "notes": "Tag-, Wochen-, Monats-, Jahres- und 10-Jahresdiagramme; ohne Drittanbieter-App oder CSV-Import. Direkte ESP32-C6-Übertragung in separatem Update."
 }
