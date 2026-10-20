@@ -1,0 +1,241 @@
+name: VitalKompass 1.9.2 iPhone-Speicherreparatur
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/vitalkompass-192.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vitalkompass-192-gewicht
+  cancel-in-progress: false
+
+jobs:
+  fix-iphone-saving:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: GitHub-Repository auschecken
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: true
+
+      - name: Installationsstatus feststellen
+        id: state
+        run: |
+          if python3 -c 'import json; raise SystemExit(0 if json.load(open("version.json"))["version"] == "1.9.2" else 1)'; then
+            echo 'installed=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'installed=false' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Nur Programmcode pruefen und gezielt reparieren
+        if: steps.state.outputs.installed == 'false'
+        run: |
+          cat > /tmp/vk192_fix.py <<'PY'
+          #!/usr/bin/env python3
+          """VitalKompass 1.9.2: protected iOS persistence and service-worker lifecycle.
+          
+          Runs in GitHub Actions against known SHA-checked program source. Does not access
+          patient records, IndexedDB, browser data or passwords.
+          """
+          import hashlib
+          import json
+          from pathlib import Path
+          
+          EXPECTED = {
+              'app.js': '7f6467ed354bca9304e5c4a5e854e796a12130d3',
+              'sw.js': '86b0922eda23c6724101f2b6f0153a59cfeb9940',
+              'version.json': '254d6279e2f79a8fc4616b56a91f5389a47f4ac8',
+          }
+          
+          def once(text, old, new):
+              count = text.count(old)
+              if count != 1:
+                  raise RuntimeError(f'Quellcode weicht ab. Erwartet genau einen Treffer für {old[:70]!r}, gefunden: {count}.')
+              return text.replace(old, new, 1)
+          
+          def read(path):
+              raw=Path(path).read_bytes()
+              sha=hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest()
+              if sha != EXPECTED[path]:
+                  raise RuntimeError(f'Sicherheitsstopp: GitHub-Code {path} wurde verändert. Erwartet {EXPECTED[path]}, gefunden {sha}.')
+              return raw.decode('utf-8')
+          
+          def patch_app(src):
+              src=once(src,'/* VitalKompass v1.9.1','/* VitalKompass v1.9.2')
+              src=once(src,"const VERSION='1.9.1'", "const VERSION='1.9.2'")
+              src=once(src,'let stagedBackupFile=null;',
+                'let stagedBackupFile=null;\nlet vkApprovedUpdateReload=false; // Nur nach ausdruecklichem Tippen auf Update installieren.')
+              src=once(src,
+                "if(action==='install-update'){const reg=await navigator.serviceWorker?.getRegistration();if(reg?.waiting){reg.waiting.postMessage('SKIP_WAITING');$('#update-status').textContent='Update wird aktiviert. Seite lädt anschließend neu.'}else{await checkUpdate();const reg2=await navigator.serviceWorker?.getRegistration();if(reg2?.waiting)reg2.waiting.postMessage('SKIP_WAITING');else toast('Kein installiertes Update wartet.');}return}",
+                "if(action==='install-update'){await saveQueue;let reg=await navigator.serviceWorker?.getRegistration();if(!reg?.waiting){await checkUpdate();reg=await navigator.serviceWorker?.getRegistration();}if(reg?.waiting){vkApprovedUpdateReload=true;reg.waiting.postMessage('SKIP_WAITING');const label=$('#update-status');if(label)label.textContent='Update wird nach abgeschlossenen Speichervorgängen aktiviert.';}else toast('Kein Update wartet auf Installation.');return}")
+              src=once(src,
+                "if('serviceWorker' in navigator && location.protocol==='https:'){navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'}).catch(()=>{});navigator.serviceWorker.addEventListener('controllerchange',()=>location.reload())}",
+                "if('serviceWorker' in navigator && location.protocol==='https:'){navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'}).catch(()=>{});navigator.serviceWorker.addEventListener('controllerchange',()=>{if(!vkApprovedUpdateReload){/* Kein automatischer Reload während Eingabe oder Verschlüsselung. */return;}saveQueue.then(()=>location.reload()).catch(()=>toast('Update aufgeschoben: letzter Speichervorgang fehlgeschlagen.'));})}")
+              # Distinct success from attempted writes. Native IndexedDB write is awaited
+              # through its transaction oncomplete, then read back as a local sanity check.
+              src=once(src,
+                "const previousWeights=data.weights.map(x=>({...x})),previousProfileWeight=data.profile.weight;\n weightSaveInProgress=true;\n try{\n  if(at>=0)data.weights[at]=entry;else data.weights.push(entry);\n  syncProfileWeight();\n  await save();\n }catch(error){data.weights=previousWeights;data.profile.weight=previousProfileWeight;throw error}\n finally{weightSaveInProgress=false}\n renderMain();toast('Gewicht gespeichert: '+nf(entry.kg,1)+' kg.');return;",
+                "const previousWeights=data.weights.map(x=>({...x})),previousProfileWeight=data.profile.weight;\n"
+                " const weightFeedback=$('#weight-save-feedback'),saveButton=form.querySelector('button[type=\\\"submit\\\"]');\n"
+                " weightSaveInProgress=true;\n"
+                " if(weightFeedback){weightFeedback.textContent='Gewicht wird verschlüsselt gespeichert …';weightFeedback.classList.remove('vk-save-error')}\n"
+                " if(saveButton){saveButton.disabled=true;saveButton.textContent='Speichert …'}\n"
+                " try{\n"
+                "  if(at>=0)data.weights[at]=entry;else data.weights.push(entry);\n"
+                "  syncProfileWeight();\n"
+                "  await save();\n"
+                "  const stored=await getRec();\n"
+                "  if(!stored?.cipher||!stored?.iv)throw Error('Speicherprüfung fehlgeschlagen. Der Eintrag wurde nicht bestätigt.');\n"
+                " }catch(error){data.weights=previousWeights;data.profile.weight=previousProfileWeight;throw error}\n"
+                " finally{weightSaveInProgress=false;if(saveButton?.isConnected){saveButton.disabled=false;saveButton.textContent='Gewicht speichern'}}\n"
+                " renderMain();toast('Gewicht dauerhaft gespeichert: '+nf(entry.kg,1)+' kg.');return;")
+              # Clear warning if the browser unexpectedly reloads during an in-flight save.
+              # Marker never contains health measurements, user identifiers or passwords.
+              src=once(src,
+                "weightSaveInProgress=true;\n if(weightFeedback)",
+                "weightSaveInProgress=true;\n try{sessionStorage.setItem('vk-weight-save-pending','1')}catch{}\n if(weightFeedback)")
+              src=once(src,
+                "finally{weightSaveInProgress=false;if(saveButton?.isConnected){saveButton.disabled=false;saveButton.textContent='Gewicht speichern'}}",
+                "finally{weightSaveInProgress=false;try{sessionStorage.removeItem('vk-weight-save-pending')}catch{};if(saveButton?.isConnected){saveButton.disabled=false;saveButton.textContent='Gewicht speichern'}}")
+              src=once(src,
+                "function pageWeight(){return pageWeightOld()+vkWeightGoalPanel()}",
+                "function pageWeight(){let interrupted=false;try{interrupted=sessionStorage.getItem('vk-weight-save-pending')==='1'}catch{};return (interrupted?'<div class=\\\"notice warn\\\" role=\\\"status\\\">Ein früherer Speichervorgang wurde möglicherweise unterbrochen. Prüfe zuerst die Eintragsliste, bevor du erneut speicherst.</div>':'')+pageWeightOld()+vkWeightGoalPanel()}")
+              return src
+          
+          def patch_sw(src):
+              src=once(src, '/* VitalKompass 1.9.1:', '/* VitalKompass 1.9.2:')
+              src=once(src,"const CACHE='vital-kompass-1.9.1-gewicht-fix';", "const CACHE='vital-kompass-1.9.2-save-safe';")
+              src=once(src,
+                "self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(FILES)).then(()=>self.skipWaiting())));",
+                "self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(FILES))));")
+              return src
+          
+          def main():
+              originals={p:read(p) for p in EXPECTED}
+              current=json.loads(originals['version.json'])
+              if current.get('version') != '1.9.1':
+                  raise RuntimeError('Nur für VitalKompass 1.9.1 geeignet. Keine Daten verändert.')
+              nextfiles={'app.js':patch_app(originals['app.js']),'sw.js':patch_sw(originals['sw.js'])}
+              current.update({'version':'1.9.2','released':'2026-10-20','notes':
+                'Stabilisierung der Gewichtsspeicherung unter iOS. Kein automatischer Service-Worker-Neustart, während die App geöffnet ist; sichtbarer Speicherstatus und lokale Speicherprüfung. Keine automatische Sperre.'})
+              nextfiles['version.json']=json.dumps(current,ensure_ascii=False,indent=2)+'\n'
+              for name,contents in nextfiles.items():
+                  Path(name).write_text(contents,encoding='utf-8')
+              print('Programmdateien auf Version 1.9.2 aktualisiert. Keine Patientendaten verändert.')
+          
+          if __name__=='__main__': main()
+          PY
+          python3 /tmp/vk192_fix.py
+
+      - name: Syntax und echte Gewichtsspeicher-Regressionen pruefen
+        if: steps.state.outputs.installed == 'false'
+        run: |
+          node --check app.js
+          node --check sw.js
+          python3 -m json.tool version.json > /dev/null
+          python3 - <<'PY'
+          """Tests actual weight-handler body isolated from the freshly patched app.js."""
+          import subprocess, tempfile
+          from pathlib import Path
+          s=Path('app.js').read_text(encoding='utf-8')
+          a="if(form.id==='weight-form'){\n if(weightSaveInProgress)return;"
+          b="if(form.id==='glucose-form'){"
+          assert s.count(a)==1 and s.count(b)==1
+          branch=s[s.index(a):s.index(b)].rstrip()
+          js=r'''
+          'use strict';
+          const assert=require('node:assert/strict');
+          let data={weights:[],profile:{weight:''}},weightSaveInProgress=false;
+          let persisted=null,shouldFail=false,delay=false,release=null,rendered=0;
+          const sessionMap=new Map();
+          const sessionStorage={setItem(k,v){sessionMap.set(k,v)},getItem(k){return sessionMap.get(k)||null},removeItem(k){sessionMap.delete(k)}};
+          const feedback={textContent:'',classList:{remove(){}}};
+          const button={disabled:false,textContent:'Gewicht speichern',isConnected:true};
+          const $=q=>q==='#weight-save-feedback'?feedback:null;
+          const today=()=> '2026-10-20';
+          const nval=v=>v==null||v===''?NaN:Number(String(v).replace(',','.'));
+          const dateValid=v=>/^\d{4}-\d{2}-\d{2}$/.test(v);
+          const timeValid=v=>/^([01]\d|2[0-3]):[0-5]\d$/.test(v);
+          const bpMealLabels={before_breakfast:'Vor dem Frühstück'};
+          const id=()=>String(Math.floor(Math.random()*1e15));
+          const sortdate=(a,b)=>`${a.date}T${a.time}`.localeCompare(`${b.date}T${b.time}`);
+          const nf=v=>String(v);
+          function syncProfileWeight(){const w=[...data.weights].sort(sortdate).at(-1);data.profile.weight=w?String(w.kg):''}
+          async function save(){if(delay)await new Promise(resolve=>{release=resolve});if(shouldFail)throw Error('simulierter Speicherausfall');persisted=JSON.parse(JSON.stringify(data))}
+          async function getRec(){return persisted?{cipher:'encrypted',iv:'nonce'}:null}
+          function renderMain(){rendered++}function toast(){}
+          async function submit(values){const form={id:'weight-form',querySelector:()=>button};const f={get:name=>Object.prototype.hasOwnProperty.call(values,name)?values[name]:''};
+          __BRANCH__
+          }
+          const entry=(kg,id='')=>({kg,id,date:'2026-10-20',time:'15:23',mealTiming:'before_breakfast',note:''});
+          (async()=>{
+           await submit(entry('130,5'));
+           assert.equal(data.weights.length,1);assert.equal(data.weights[0].kg,130.5);
+           assert.equal(persisted.weights.length,1);assert.equal(data.profile.weight,'130.5');
+           assert.equal(sessionMap.has('vk-weight-save-pending'),false);
+           assert.equal(button.disabled,false);
+           let first=data.weights[0].id;
+           await submit(entry('129.8',first)); assert.equal(data.weights.length,1);assert.equal(data.weights[0].kg,129.8);
+           for(const v of ['','abc','19,8','401'])await assert.rejects(()=>submit(entry(v)));
+           assert.equal(data.weights.length,1);
+           shouldFail=true;const before=JSON.stringify(data);
+           await assert.rejects(()=>submit(entry('125,0')),/simulierter Speicherausfall/);
+           assert.equal(JSON.stringify(data),before);
+           assert.equal(sessionMap.has('vk-weight-save-pending'),false);
+           shouldFail=false;delay=true;
+           const active=submit(entry('131,1'));
+           assert.equal(button.disabled,true);
+           assert.equal(sessionMap.get('vk-weight-save-pending'),'1');
+           await submit(entry('150,0'));assert.equal(data.weights.length,2);
+           release();await active;
+           assert.equal(data.weights.length,2);assert.equal(persisted.weights.length,2);
+           assert.equal(button.disabled,false);
+           assert.ok(rendered>=3);
+           console.log('OK: Komma/Punkt, Schreiben, Wiederlesen, Bearbeiten, Rollback, Doppeltippen, Status.');
+          })().catch(err=>{console.error(err);process.exitCode=1});
+          '''.replace('__BRANCH__',branch)
+          with tempfile.TemporaryDirectory() as td:
+              path=Path(td)/'test.js';path.write_text(js,encoding='utf-8')
+              subprocess.run(['node','--check',str(path)],check=True)
+              subprocess.run(['node',str(path)],check=True)
+          PY
+
+      - name: Sicherheitsregeln und Datenmodell kontrollieren
+        if: steps.state.outputs.installed == 'false'
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          code=Path('app.js').read_text(encoding='utf-8')
+          sw=Path('sw.js').read_text(encoding='utf-8')
+          assert json.loads(Path('version.json').read_text(encoding='utf-8'))['version']=='1.9.2'
+          assert "DB='vitalkompass-secure-v1'" in code
+          assert 'function pageAsthma' in code and 'function pageWeight' in code
+          assert "function pageDoctorReport" in code and 'backup-share' in code
+          assert "autoLock" not in code and "automaticLock" not in code
+          assert "then(()=>self.skipWaiting())" not in sw
+          assert "e.data==='SKIP_WAITING'" in sw
+          assert "vkApprovedUpdateReload" in code
+          assert "sessionStorage.setItem('vk-weight-save-pending','1')" in code
+          print('Datenerhalt, manueller Update-Wechsel und keine automatische Sperre: OK')
+          PY
+
+      - name: Getestete Reparatur veroeffentlichen
+        if: steps.state.outputs.installed == 'false'
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.js sw.js version.json
+          if git diff --cached --quiet; then
+            echo 'Keine Aenderungen notwendig.'
+          else
+            git commit -m 'VitalKompass 1.9.2: sichere iPhone-Gewichtsspeicherung ohne Auto-Reload'
+            git push origin HEAD:main
+          fi
