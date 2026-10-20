@@ -1,7 +1,7 @@
-/* VitalKompass v1.9.1 — lokal, keine externen Bibliotheken, keine Analytics */
+/* VitalKompass v1.9.2 — lokal, keine externen Bibliotheken, keine Analytics */
 'use strict';
 (() => {
-const VERSION='1.9.1', DB='vitalkompass-secure-v1', STORE='safe', KEY='vault';
+const VERSION='1.9.2', DB='vitalkompass-secure-v1', STORE='safe', KEY='vault';
 const root=document.getElementById('root');
 const $=(q,scope=document)=>scope.querySelector(q);
 const $$=(q,scope=document)=>Array.from(scope.querySelectorAll(q));
@@ -21,6 +21,7 @@ let saveQueue=Promise.resolve();
 let bridgePreview=null;
 let lastPDFUrl=null,lastPDFBlob=null,lastPDFName='';
 let stagedBackupFile=null;
+let vkApprovedUpdateReload=false; // Nur nach ausdruecklichem Tippen auf Update installieren.
 const colors={fasting:'#1b6fb3',before:'#7c53a5',after:'#de672f',other:'#12876e',sys:'#bd293e',dia:'#245dba',pulse:'#ba7b0b'};
 const gLabels={fasting:'Nüchtern',before:'Vor dem Essen',after:'Nach dem Essen',other:'Sonstige'};
 const levelColors={low:'#3667c8',good:'#16805d',high:'#cb821c',critical:'#c22842'};
@@ -412,7 +413,7 @@ function vkDoctorHtml(from,to,choice){const r=vkDocRows(from,to),name=h(data.pro
 function pageDoctorReport(){const choices=[['bp','Blutdruck'],['glucose','Blutzucker'],['weight','Körpergewicht'],['asthma','Asthma'],['labs','Laborwerte'],['meds','Medikamente']];return tag('Arztbericht erstellen','Zeitraum und Gesundheitsbereiche auswählen; PDF wird lokal auf dem iPhone erzeugt.')+panel('Berichtsoptionen',`<form id="doctor-report-form"><div class="form-grid"><label class="field"><span>Von</span><input name="from" type="date" value="${rangeDays(30)}" required></label><label class="field"><span>Bis</span><input name="to" type="date" value="${today()}" required></label></div><fieldset class="vk-fieldset"><legend>Inhalt für den Bericht</legend>${choices.map(([key,label])=>`<label><input name="part" type="checkbox" value="${key}" ${reportChoice[key]?'checked':''}> ${label}</label>`).join('')}</fieldset><button class="primary" type="submit">Bericht als PDF erstellen</button></form><p class="section-note">PDFs sind im Gegensatz zum verschlüsselten App-Speicher nicht automatisch verschlüsselt. Nach dem Export sicher speichern und nur bei Bedarf teilen.</p>`)}
 
 
-function pageWeight(){return pageWeightOld()+vkWeightGoalPanel()}
+function pageWeight(){let interrupted=false;try{interrupted=sessionStorage.getItem('vk-weight-save-pending')==='1'}catch{};return (interrupted?'<div class=\"notice warn\" role=\"status\">Ein früherer Speichervorgang wurde möglicherweise unterbrochen. Prüfe zuerst die Eintragsliste, bevor du erneut speicherst.</div>':'')+pageWeightOld()+vkWeightGoalPanel()}
 function pageStart(){const old=pageStartOld();const point='<div class="main-grid">';return old.includes(point)?old.replace(point,vkDashboard()+point):old+vkDashboard()}
 function pageMeds(){return pageMedsOld()+vkMedStockPanel()}
 function pageReminders(){return pageRemindersOld()+vkReminderPanel()}
@@ -714,14 +715,20 @@ if(form.id==='weight-form'){
  const at=data.weights.findIndex(x=>x.id===entryId);
  if(entryId&&at<0)throw Error('Dieser Gewichtseintrag wurde nicht gefunden.');
  const previousWeights=data.weights.map(x=>({...x})),previousProfileWeight=data.profile.weight;
+ const weightFeedback=$('#weight-save-feedback'),saveButton=form.querySelector('button[type=\"submit\"]');
  weightSaveInProgress=true;
+ try{sessionStorage.setItem('vk-weight-save-pending','1')}catch{}
+ if(weightFeedback){weightFeedback.textContent='Gewicht wird verschlüsselt gespeichert …';weightFeedback.classList.remove('vk-save-error')}
+ if(saveButton){saveButton.disabled=true;saveButton.textContent='Speichert …'}
  try{
   if(at>=0)data.weights[at]=entry;else data.weights.push(entry);
   syncProfileWeight();
   await save();
+  const stored=await getRec();
+  if(!stored?.cipher||!stored?.iv)throw Error('Speicherprüfung fehlgeschlagen. Der Eintrag wurde nicht bestätigt.');
  }catch(error){data.weights=previousWeights;data.profile.weight=previousProfileWeight;throw error}
- finally{weightSaveInProgress=false}
- renderMain();toast('Gewicht gespeichert: '+nf(entry.kg,1)+' kg.');return;
+ finally{weightSaveInProgress=false;try{sessionStorage.removeItem('vk-weight-save-pending')}catch{};if(saveButton?.isConnected){saveButton.disabled=false;saveButton.textContent='Gewicht speichern'}}
+ renderMain();toast('Gewicht dauerhaft gespeichert: '+nf(entry.kg,1)+' kg.');return;
 }
 if(form.id==='glucose-form'){const raw=nval(f.get('value')),mgdl=f.get('unit')==='mmol'?raw*18.0182:raw;if(!Number.isFinite(mgdl)||mgdl<10||mgdl>700)throw Error('Plausiblen Blutzuckerwert eingeben (10–700 mg/dl).');if(!dateValid(f.get('date'))||!timeValid(f.get('time')))throw Error('Datum und Uhrzeit prüfen.');const item={id:id(),type:'glucose',date:f.get('date'),time:f.get('time'),mgdl:Math.round(mgdl*10)/10,period:f.get('period'),note:f.get('note')||'',verified:true};data.measurements.push(item);await save();renderMain();toast('Blutzucker gespeichert.');const w=glucoseWarnings(item);if(w.length)alert('Blutzucker-Warnhinweis:\n'+w.join('\n'));return}
 if(form.id==='bp-form'){const sys=nval(f.get('sys')),dia=nval(f.get('dia')),pulse=nval(f.get('pulse'));if(!Number.isFinite(sys)||!Number.isFinite(dia)||sys<=dia||sys<40||sys>320||dia<20||dia>220||(Number.isFinite(pulse)&&(pulse<20||pulse>240)))throw Error('Bitte den systolischen, diastolischen Wert und Puls prüfen.');if(!dateValid(f.get('date'))||!timeValid(f.get('time')))throw Error('Datum und Uhrzeit prüfen.');const mealTiming=String(f.get('mealTiming')||'unknown');if(!Object.prototype.hasOwnProperty.call(bpMealLabels,mealTiming))throw Error('Ungültige Mahlzeitenauswahl.');const item={id:id(),type:'bp',date:f.get('date'),time:f.get('time'),sys,dia,pulse:Number.isFinite(pulse)?pulse:null,mealTiming,note:f.get('note')||'',verified:true};data.measurements.push(item);await save();renderMain();toast('Blutdruck gespeichert.');const w=bpWarnings(item);if(w.length)alert('Blutdruck-Warnhinweis:\n'+w.join('\n'));return}
@@ -808,7 +815,7 @@ if(action==='print-report'){makePrint('Gesundheitsbericht',statsHtml());return}
 if(action==='print-emergency'){const p=data.profile;makePrint('Notfallpass',`<div class="notice danger"><b>ACHTUNG:</b> Angaben aus altem Dokument – bitte ärztlich prüfen. Notruf: 112.</div><h2>${h(p.name)}</h2><p>Adresse: ${h([p.street,p.postalCode,p.city].filter(Boolean).join(', '))} · Telefon: ${h(p.phone||'–')}</p><p>Geboren: ${h(p.birthday?fmtDate(p.birthday):'')} · Blutgruppe: ${h(p.bloodGroup)} (unbestätigt)</p><h3>Allergien / Unverträglichkeiten</h3><p>${h([...p.allergies,...p.intolerances].join('; '))}</p><h3>Erkrankungen</h3><p>${h(p.conditions.join('; '))}</p><h3>Medikamente (Stand überprüfen)</h3><p>${data.meds.map(m=>h(m.name+' '+m.dose+' '+m.schedule)).join('; ')}</p><h3>Notfallkontakte</h3><p>${p.contact.map(c=>h(c.name+': '+c.phone)).join('; ')}</p><h3>Weitere medizinische Hinweise</h3><p>${h(p.notes)}</p><p>Dieses Dokument ersetzt keinen medizinisch bestätigten Notfallausweis.</p>`);return}
 if(action==='copy-letter'){const txt=$('#letter-text')?.value||'';if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(txt)}else{$('#letter-text').select();throw Error('Automatisches Kopieren nicht möglich. Bitte Textfeld markieren und manuell kopieren.')}toast('Anschreiben kopiert.');return}
 if(action==='check-update'){await checkUpdate();return}
-if(action==='install-update'){const reg=await navigator.serviceWorker?.getRegistration();if(reg?.waiting){reg.waiting.postMessage('SKIP_WAITING');$('#update-status').textContent='Update wird aktiviert. Seite lädt anschließend neu.'}else{await checkUpdate();const reg2=await navigator.serviceWorker?.getRegistration();if(reg2?.waiting)reg2.waiting.postMessage('SKIP_WAITING');else toast('Kein installiertes Update wartet.');}return}
+if(action==='install-update'){await saveQueue;let reg=await navigator.serviceWorker?.getRegistration();if(!reg?.waiting){await checkUpdate();reg=await navigator.serviceWorker?.getRegistration();}if(reg?.waiting){vkApprovedUpdateReload=true;reg.waiting.postMessage('SKIP_WAITING');const label=$('#update-status');if(label)label.textContent='Update wird nach abgeschlossenen Speichervorgängen aktiviert.';}else toast('Kein Update wartet auf Installation.');return}
 if(action==='wipe'){if(!confirm('ALLE GESUNDHEITSDATEN dieses Geräts endgültig löschen? Nur mit einem externen Backup wiederherstellbar.'))return;if(!confirm('Wirklich alle Daten löschen? Diese Aktion kann nicht rückgängig gemacht werden.'))return;await saveQueue;discardTemporaryPDF();bridgePreview=null;await new Promise((resolve,reject)=>{const t=db.transaction(STORE,'readwrite');t.objectStore(STORE).delete(KEY);t.oncomplete=resolve;t.onerror=()=>reject(t.error)});data=null;key=null;authPage(false);return}
 }catch(e){alert(e.message||'Aktion fehlgeschlagen')}}
 root.addEventListener('click',e=>{const point=e.target.closest('[data-chart-info]');if(point){toast(point.dataset.chartInfo||'Messwert');return}const navButton=e.target.closest('[data-view]');if(navButton){view=navButton.dataset.view;labQuery='';common();window.scrollTo(0,0);return}const period=e.target.closest('[data-report]');if(period){reportPeriod=period.dataset.report;renderMain();return}const periodAnalysis=e.target.closest('[data-analysis-days]');if(periodAnalysis){analysisDays=periodAnalysis.dataset.analysisDays;renderMain();return}const chartPeriod=e.target.closest('[data-chart-period]');if(chartPeriod){const t=chartPeriod.dataset.chartType,period=chartPeriod.dataset.chartPeriod;if(Object.prototype.hasOwnProperty.call(chartPeriods,t)&&CHART_PERIODS.some(x=>x[0]===period)){chartPeriods[t]=period;renderMain()}return}const chart=e.target.closest('[data-chart-days]');if(chart){chartWindow=chart.dataset.chartDays;renderMain();return}const action=e.target.closest('[data-action]');if(action)doAction(action)});
@@ -829,6 +836,6 @@ if(el.closest('#lab-form')){
 }
 });
 window.addEventListener('pagehide',()=>{ /* Daten sind nach jeder Eingabe verschlüsselt gespeichert. */ });
-if('serviceWorker' in navigator && location.protocol==='https:'){navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'}).catch(()=>{});navigator.serviceWorker.addEventListener('controllerchange',()=>location.reload())}
+if('serviceWorker' in navigator && location.protocol==='https:'){navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'}).catch(()=>{});navigator.serviceWorker.addEventListener('controllerchange',()=>{if(!vkApprovedUpdateReload){/* Kein automatischer Reload während Eingabe oder Verschlüsselung. */return;}saveQueue.then(()=>location.reload()).catch(()=>toast('Update aufgeschoben: letzter Speichervorgang fehlgeschlagen.'));})}
 init();
 })();

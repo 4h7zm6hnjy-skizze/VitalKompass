@@ -1,7 +1,7 @@
-/* VitalKompass 1.9.1: network-first code updates, offline fallback. */
-const CACHE='vital-kompass-1.9.1-gewicht-fix';
+/* VitalKompass 1.9.2: network-first code updates, offline fallback. */
+const CACHE='vital-kompass-1.9.2-save-safe';
 const FILES=['./','./index.html','./style.css','./pdf-export.js','./vkpro.js','./app.js','./icon.svg','./icon-192.png','./icon-512.png','./manifest.webmanifest','./version.json'];
-self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(FILES)).then(()=>self.skipWaiting())));
+self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(FILES))));
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('vital-kompass-')&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
 self.addEventListener('fetch',e=>{
  const req=e.request;if(req.method!=='GET')return;

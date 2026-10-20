@@ -1,5 +1,5 @@
 {
-  "version": "1.9.1",
+  "version": "1.9.2",
   "released": "2026-10-20",
-  "notes": "iPhone-Gewichtseingabe repariert: Dezimalkomma und Dezimalpunkt, sichtbare Fehlermeldungen, Speicherschutz gegen Doppeltippen und Datenrollback bei Speicherfehlern. Keine automatische Sperre; Daten bleiben verschlüsselt."
+  "notes": "Stabilisierung der Gewichtsspeicherung unter iOS. Kein automatischer Service-Worker-Neustart, während die App geöffnet ist; sichtbarer Speicherstatus und lokale Speicherprüfung. Keine automatische Sperre."
 }
