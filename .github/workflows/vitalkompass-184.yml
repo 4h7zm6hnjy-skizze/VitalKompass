@@ -1,1 +1,62 @@
+name: VitalKompass 1.8.4 installieren
+
+on:
+  push:
+    paths:
+      - '.github/workflows/vitalkompass-184.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  install:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Repository laden
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          fetch-depth: 1
+
+      - name: Update mit bestehendem Generator erzeugen
+        run: |
+          python3 prepare_update.py
+          test -f GitHub_Upload_1.8.4/app.js
+          test -f GitHub_Upload_1.8.4/style.css
+          test -f GitHub_Upload_1.8.4/sw.js
+          test -f GitHub_Upload_1.8.4/version.json
+
+      - name: Fertige App-Dateien pruefen
+        run: |
+          node --check GitHub_Upload_1.8.4/app.js
+          python3 - <<'PY'
+          import json, pathlib
+          folder = pathlib.Path('GitHub_Upload_1.8.4')
+          app = (folder / 'app.js').read_text(encoding='utf-8')
+          version = json.loads((folder / 'version.json').read_text(encoding='utf-8'))
+          required = ('weight-form', 'pageWeight', 'weightChart', 'weightReportBlock',
+                      'backup-share', 'backup-download', 'confirmReplace')
+          assert all(marker in app for marker in required), 'Ein Baustein fehlt.'
+          assert version['version'] == '1.8.4', 'Versionsnummer nicht korrekt.'
+          print('Version 1.8.4 und neue App-Bausteine vorhanden.')
+          PY
+
+      - name: App-Dateien austauschen
+        run: |
+          cp GitHub_Upload_1.8.4/app.js app.js
+          cp GitHub_Upload_1.8.4/style.css style.css
+          cp GitHub_Upload_1.8.4/sw.js sw.js
+          cp GitHub_Upload_1.8.4/version.json version.json
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.js style.css sw.js version.json
+          if git diff --cached --quiet; then
+            echo 'Keine Aenderungen erforderlich.'
+          else
+            git commit -m 'VitalKompass 1.8.4: Koerpergewicht und iPhone-Backup'
+            git push origin HEAD:main
+          fi
 
