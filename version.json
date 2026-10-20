@@ -1,5 +1,5 @@
 {
-  "version": "1.9.7",
+  "version": "1.9.8",
   "released": "2026-10-20",
-  "notes": "Intensivprüfung: Schutz vor parallelen Gewichtsspeicher-/Sperr-/Backup-Aktionen; Rollback bei fehlgeschlagenen Blutdruck-, Blutzucker-, Asthma-, Lösch- und Erinnerungsvorgängen; optionale Pulsprüfung; iPhone-Dezimalkomma für Laborwerte und barrierefreies Zoomen. Lokale Verschlüsselung bleibt; keine automatische Sperre."
+  "notes": "Feste iPhone-Darstellung: Zoomen per Zwei-Finger-Geste und Doppeltippen unterbunden, kein automatischer Formularzoom; normales vertikales Scrollen bleibt. Keine Aenderungen an Gesundheitsdaten, Verschluesselung oder Passwortsperre."
 }

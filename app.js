@@ -1,7 +1,7 @@
 /* VitalKompass v1.9.7 — lokal, keine externen Bibliotheken, keine Analytics */
 'use strict';
 (() => {
-const VERSION='1.9.7', DB='vitalkompass-secure-v1', STORE='safe', KEY='vault';
+const VERSION='1.9.8', DB='vitalkompass-secure-v1', STORE='safe', KEY='vault';
 const root=document.getElementById('root');
 const $=(q,scope=document)=>scope.querySelector(q);
 const $$=(q,scope=document)=>Array.from(scope.querySelectorAll(q));
@@ -909,6 +909,21 @@ if(el.closest('#lab-form')){
  }
 }
 });
+/* VK198 FIXED_VIEW_BEGIN: iPhone-Ansicht ohne Pinch-Zoom, normale Einzelberuehrung bleibt. */
+if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+  for (const type of ['gesturestart', 'gesturechange']) {
+    document.addEventListener(type, ev => ev.preventDefault(), {passive:false});
+  }
+  for (const type of ['touchstart', 'touchmove']) {
+    document.addEventListener(type, ev => {
+      if (ev.touches && ev.touches.length > 1) ev.preventDefault();
+    }, {passive:false});
+  }
+}
+document.addEventListener('dblclick', ev => {
+  if (!ev.target?.closest?.('input,textarea,select,[contenteditable="true"]')) ev.preventDefault();
+}, {passive:false});
+/* VK198 FIXED_VIEW_END */
 window.addEventListener('pagehide',()=>{ /* Daten sind nach jeder Eingabe verschlüsselt gespeichert. */ });
 if('serviceWorker' in navigator && location.protocol==='https:'){navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'}).catch(()=>{});navigator.serviceWorker.addEventListener('controllerchange',()=>{if(!vkApprovedUpdateReload){/* Kein automatischer Reload während Eingabe oder Verschlüsselung. */return;}saveQueue.then(()=>location.reload()).catch(()=>toast('Update aufgeschoben: letzter Speichervorgang fehlgeschlagen.'));})}
 init();
