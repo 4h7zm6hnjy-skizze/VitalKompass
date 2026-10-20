@@ -1,5 +1,5 @@
 {
-  "version": "1.9.0",
+  "version": "1.9.1",
   "released": "2026-10-20",
-  "notes": "Gemeinsames Update aus 1.8.5 und 1.9.0: Backup-Reparatur, iPhone-Navigation, interaktive Messpunkte, Gewichtsziel, Asthma-Tagebuch, Messungserinnerungen/Kalender, Medikamentenvorrat, Zeitvergleich und Arztbericht. Keine automatische Sperre."
+  "notes": "iPhone-Gewichtseingabe repariert: Dezimalkomma und Dezimalpunkt, sichtbare Fehlermeldungen, Speicherschutz gegen Doppeltippen und Datenrollback bei Speicherfehlern. Keine automatische Sperre; Daten bleiben verschlüsselt."
 }

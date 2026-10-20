@@ -1,7 +1,7 @@
-/* VitalKompass v1.9.0 — lokal, keine externen Bibliotheken, keine Analytics */
+/* VitalKompass v1.9.1 — lokal, keine externen Bibliotheken, keine Analytics */
 'use strict';
 (() => {
-const VERSION='1.9.0', DB='vitalkompass-secure-v1', STORE='safe', KEY='vault';
+const VERSION='1.9.1', DB='vitalkompass-secure-v1', STORE='safe', KEY='vault';
 const root=document.getElementById('root');
 const $=(q,scope=document)=>scope.querySelector(q);
 const $$=(q,scope=document)=>Array.from(scope.querySelectorAll(q));
@@ -285,6 +285,7 @@ function pageStartOld(){const g=latest('glucose'),b=latest('bp'),w=[...(data.wei
 
 /* 1.8.4: Lokal verschlüsseltes Körpergewichtstagebuch; keine externen Bibliotheken. */
 let weightMealFilter='all';
+let weightSaveInProgress=false;
 function weightChart(period='month',preloaded=null,wide=720,mealFilter='all'){
  const source=preloaded===null?(data.weights||[]).filter(e=>e.date>=chartMinDate(period)&&e.date<=today()):preloaded;
  const selected=source.filter(e=>Number.isFinite(e.kg)&&(mealFilter==='all'||e.mealTiming===mealFilter)).sort(sortdate);
@@ -333,7 +334,7 @@ function pageWeightOld(){
  const options=Object.entries(bpMealLabels).filter(([k])=>k!=='unknown');
  return tag('Körpergewicht','Tägliches Gewichtstagebuch mit sechs Messzeitpunkten und fünf Diagrammansichten.')+
  `<div class="main-grid"><div class="metric"><span>Letzte Gewichtsmessung</span><strong>${last?nf(last.kg,1)+' kg':'–'}</strong><small>${last?fmtDate(last.date)+' · '+h(last.time):'Noch keine Messung'}</small></div><div class="metric"><span>Einträge</span><strong>${entries.length}</strong><small>Insgesamt dokumentiert</small></div></div>`+
- panel('Körpergewicht eintragen',`<form id="weight-form"><input name="id" type="hidden"><div class="form-grid"><label class="field"><span>Datum</span><input name="date" type="date" value="${today()}" required></label><label class="field"><span>Uhrzeit</span><input name="time" type="time" value="${nowTime()}" required></label><label class="field"><span>Körpergewicht (kg)</span><input name="kg" type="number" min="20" max="400" step="0.1" inputmode="decimal" required placeholder="z. B. 130,0"></label><label class="field"><span>Wann gewogen?</span><select name="mealTiming" required>${options.map(([k,v])=>`<option value="${k}">${h(v)}</option>`).join('')}</select></label><label class="field"><span>Notiz (optional)</span><input name="note" maxlength="300" placeholder="z. B. nach dem Aufstehen"></label></div><div class="actions"><button class="primary" type="submit">Gewicht speichern</button></div></form><p class="section-note">Mehrere Messungen pro Tag sind möglich. Gespeicherte Werte kannst du unten bearbeiten und löschen.</p>`)+
+ panel('Körpergewicht eintragen',`<form id="weight-form" novalidate><input name="id" type="hidden"><div class="form-grid"><label class="field"><span>Datum</span><input name="date" type="date" value="${today()}" required></label><label class="field"><span>Uhrzeit</span><input name="time" type="time" value="${nowTime()}" required></label><label class="field"><span>Körpergewicht (kg)</span><input name="kg" type="text" inputmode="decimal" autocomplete="off" enterkeyhint="done" required placeholder="z. B. 130,5" aria-describedby="weight-input-help"></label><label class="field"><span>Wann gewogen?</span><select name="mealTiming" required>${options.map(([k,v])=>`<option value="${k}">${h(v)}</option>`).join('')}</select></label><label class="field"><span>Notiz (optional)</span><input name="note" maxlength="300" placeholder="z. B. nach dem Aufstehen"></label></div><p id="weight-input-help" class="section-note">Eingabe mit Komma oder Punkt möglich, z. B. 130,5 oder 130.5 kg.</p><div class="actions"><button class="primary" type="submit">Gewicht speichern</button></div><p id="weight-save-feedback" class="vk-save-feedback" role="status" aria-live="polite"></p></form><p class="section-note">Mehrere Messungen pro Tag sind möglich. Gespeicherte Werte kannst du unten bearbeiten und löschen.</p>`)+
  panel('Gewichtsdiagramm',chartPicker('weight')+`<label class="field weight-filter"><span>Messzeitpunkt im Diagramm</span><select id="weight-meal-filter"><option value="all" ${weightMealFilter==='all'?'selected':''}>Alle Messzeitpunkte</option>${options.map(([k,v])=>`<option value="${k}" ${weightMealFilter===k?'selected':''}>${h(v)}</option>`).join('')}</select></label>`+weightChart(chartPeriods.weight,null,720,weightMealFilter))+
  panel('Gewichtstagebuch · letzte 100 Einträge',weightTable());
 }
@@ -704,15 +705,23 @@ if(form.id==='evidence-form'){
  if(!dateValid(o.date)||!evidenceKinds.includes(o.kind))throw Error('Dokumentangaben prüfen.');data.evidence.push(o);await save();renderMain();toast('Nachweis verschlüsselt gespeichert.');return;
 }
 if(form.id==='weight-form'){
+ if(weightSaveInProgress)return;
  const kg=nval(f.get('kg')),date=String(f.get('date')||''),time=String(f.get('time')||''),meal=String(f.get('mealTiming')||''),entryId=String(f.get('id')||'');
- if(!Number.isFinite(kg)||kg<20||kg>400)throw Error('Bitte ein plausibles Körpergewicht zwischen 20 und 400 kg eingeben.');
+ if(!Number.isFinite(kg)||kg<20||kg>400)throw Error('Bitte das Gewicht als Zahl eingeben, z. B. 130,5 (erlaubt: 20 bis 400 kg).');
  if(!dateValid(date)||date>today()||!timeValid(time))throw Error('Datum oder Uhrzeit ungültig. Ein zukünftiges Datum ist nicht erlaubt.');
  if(meal==='unknown'||!Object.prototype.hasOwnProperty.call(bpMealLabels,meal))throw Error('Bitte den Messzeitpunkt auswählen.');
  const entry={id:entryId||id(),date,time,kg:Math.round(kg*10)/10,mealTiming:meal,note:String(f.get('note')||'').slice(0,300)};
  const at=data.weights.findIndex(x=>x.id===entryId);
  if(entryId&&at<0)throw Error('Dieser Gewichtseintrag wurde nicht gefunden.');
- if(at>=0)data.weights[at]=entry;else data.weights.push(entry);
- syncProfileWeight();await save();renderMain();toast('Gewicht verschlüsselt gespeichert.');return;
+ const previousWeights=data.weights.map(x=>({...x})),previousProfileWeight=data.profile.weight;
+ weightSaveInProgress=true;
+ try{
+  if(at>=0)data.weights[at]=entry;else data.weights.push(entry);
+  syncProfileWeight();
+  await save();
+ }catch(error){data.weights=previousWeights;data.profile.weight=previousProfileWeight;throw error}
+ finally{weightSaveInProgress=false}
+ renderMain();toast('Gewicht gespeichert: '+nf(entry.kg,1)+' kg.');return;
 }
 if(form.id==='glucose-form'){const raw=nval(f.get('value')),mgdl=f.get('unit')==='mmol'?raw*18.0182:raw;if(!Number.isFinite(mgdl)||mgdl<10||mgdl>700)throw Error('Plausiblen Blutzuckerwert eingeben (10–700 mg/dl).');if(!dateValid(f.get('date'))||!timeValid(f.get('time')))throw Error('Datum und Uhrzeit prüfen.');const item={id:id(),type:'glucose',date:f.get('date'),time:f.get('time'),mgdl:Math.round(mgdl*10)/10,period:f.get('period'),note:f.get('note')||'',verified:true};data.measurements.push(item);await save();renderMain();toast('Blutzucker gespeichert.');const w=glucoseWarnings(item);if(w.length)alert('Blutzucker-Warnhinweis:\n'+w.join('\n'));return}
 if(form.id==='bp-form'){const sys=nval(f.get('sys')),dia=nval(f.get('dia')),pulse=nval(f.get('pulse'));if(!Number.isFinite(sys)||!Number.isFinite(dia)||sys<=dia||sys<40||sys>320||dia<20||dia>220||(Number.isFinite(pulse)&&(pulse<20||pulse>240)))throw Error('Bitte den systolischen, diastolischen Wert und Puls prüfen.');if(!dateValid(f.get('date'))||!timeValid(f.get('time')))throw Error('Datum und Uhrzeit prüfen.');const mealTiming=String(f.get('mealTiming')||'unknown');if(!Object.prototype.hasOwnProperty.call(bpMealLabels,mealTiming))throw Error('Ungültige Mahlzeitenauswahl.');const item={id:id(),type:'bp',date:f.get('date'),time:f.get('time'),sys,dia,pulse:Number.isFinite(pulse)?pulse:null,mealTiming,note:f.get('note')||'',verified:true};data.measurements.push(item);await save();renderMain();toast('Blutdruck gespeichert.');const w=bpWarnings(item);if(w.length)alert('Blutdruck-Warnhinweis:\n'+w.join('\n'));return}
@@ -735,7 +744,7 @@ if(form.id==='threshold-form'){const changes={...data.settings};for(const k of O
 if(form.id==='benefits-form'){const result=letter(f);const out=$('#letter-result');out.innerHTML=`<label class="field"><span>Vorlage zum Kopieren</span><textarea id="letter-text" rows="14">${h(result)}</textarea></label><button data-action="copy-letter" class="secondary" type="button">Text kopieren</button>`;return}
 if(form.id==='restore-form'){if(!f.get('confirmReplace'))throw Error('Bitte zuerst die bewusste Datenüberschreibung bestätigen.');const file=f.get('file'),pass=f.get('password');if(!(file instanceof File)||!file.size)throw Error('Backup-Datei wählen.');if(file.size>32*1024*1024)throw Error('Backup zu groß.');const v=JSON.parse(await file.text());if(v.format!=='vitalkompass-backup-v1'||!v.salt||!v.iv||!v.cipher)throw Error('Unbekanntes Backup-Format.');const tempkey=await passKey(pass,unb64(v.salt));let restored;try{restored=await unpack(v,tempkey)}catch{throw Error('Backup-Passwort falsch oder Datei beschädigt.')}validateStored(restored);const priorName=String(data.profile.name||'').trim(),backupName=String(restored.profile.name||'').trim();if(priorName&&backupName&&priorName.toLocaleLowerCase('de-DE')!==backupName.toLocaleLowerCase('de-DE'))throw Error('Das Backup gehört zu einem anderen Patienten. Bitte zuerst die vorhandenen Daten separat sichern und einen neuen Speicher anlegen.');if(data.profile.birthday&&restored.profile.birthday&&data.profile.birthday!==restored.profile.birthday)throw Error('Geburtsdatum im Backup stimmt nicht mit dem vorhandenen Patienten überein.');if(!confirm(`ACHTUNG: Das Backup enthält ${restored.measurements.length} Blutdruck-/Blutzuckerwerte und ${(restored.weights||[]).length} Gewichtseinträge. Alle aktuellen Daten werden vollständig ERSETZT, nicht zusammengeführt. Fortfahren?`))return;const previousData=data;data=restored;migrateData();try{await save()}catch(e){data=previousData;throw e}view='start';common();toast('Backup wiederhergestellt.');return}
 if(form.id==='import-form'){const file=f.get('file');if(!(file instanceof File)||!file.size)throw Error('Datei auswählen.');if(file.size>1024*1024)throw Error('Importdatei zu groß.');const obj=JSON.parse(await file.text());await importPrivate(obj);return}
-}catch(err){alert(err.message||'Fehler beim Speichern')}}
+}catch(err){const message=err.message||'Fehler beim Speichern';if(form.id==='weight-form'){const target=$('#weight-save-feedback');if(target){target.textContent=message;target.classList.add('vk-save-error');target.scrollIntoView({block:'nearest'});}}alert(message)}}
 function validateStored(x){
  if(!x||typeof x!=='object'||Array.isArray(x)||!x.profile||typeof x.profile!=='object'||Array.isArray(x.profile)||!Array.isArray(x.measurements)||!Array.isArray(x.labs)||!Array.isArray(x.meds)||!x.settings||typeof x.settings!=='object'||Array.isArray(x.settings))throw Error('Inhalt des Backups ist nicht kompatibel.');
  if((x.asthmaLogs!==undefined&&(!Array.isArray(x.asthmaLogs)||x.asthmaLogs.length>50000))||(x.weights!==undefined&&(!Array.isArray(x.weights)||x.weights.length>50000))||x.measurements.length>50000||x.labs.length>50000||x.meds.length>5000||['symptoms','medTakes','reminders','evidence'].some(k=>x[k]!==undefined&&(!Array.isArray(x[k])||x[k].length>10000)))throw Error('Backup enthält zu viele Einträge.');

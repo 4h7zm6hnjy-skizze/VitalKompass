@@ -299,3 +299,8 @@ body{padding-bottom:calc(75px + env(safe-area-inset-bottom))}
 #main[data-section="doctor"] .panel{border-top:3px solid #0e8975}
 @media(min-width:900px){.vk-bottom-nav{max-width:600px;left:50%;transform:translateX(-50%);border-radius:16px 16px 0 0}}
 @media print{.vk-bottom-nav{display:none!important}body{padding-bottom:0}}
+
+/* VitalKompass 1.9.1: iPhone-Eingabefeedback für Körpergewicht */
+#weight-form input[name="kg"]{font-size:16px;min-height:48px}
+.vk-save-feedback{min-height:1.25em;margin:8px 0 0;color:#14624d;font-weight:600}
+.vk-save-feedback.vk-save-error{color:#a12c36}
