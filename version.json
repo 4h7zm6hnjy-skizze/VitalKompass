@@ -1,5 +1,5 @@
 {
-  "version": "1.8.3",
-  "released": "2026-10-19",
-  "notes": "Messwertkurven in Blutzucker-, Blutdruck-, Puls- und Labor-Diagrammen durchgezogen; Referenz-/Grenzlinien gestrichelt; ungeprüfte Punkte als offene Kreise. Keine Datenmodelländerung."
+  "version": "1.8.4",
+  "released": "2026-10-20",
+  "notes": "Gewichtstagebuch mit Messzeitpunkt und Tag/Woche/Monat/Jahr/10-Jahre-Diagramm; Körpergewicht in Monats- und Jahresbericht; iPhone-Backup per Teilen-Menü/Dateien, sicherer Import aus Dateien."
 }
