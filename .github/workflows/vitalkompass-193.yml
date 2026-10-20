@@ -1,0 +1,209 @@
+name: VitalKompass 1.9.3 – stabile Gewichtsspeicherung
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/vitalkompass-193.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vitalkompass-193-weight
+  cancel-in-progress: false
+
+jobs:
+  patch-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Repository laden
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: true
+      - name: Aktuelle Version ermitteln
+        id: state
+        shell: bash
+        run: |
+          if python3 -c 'import json; raise SystemExit(0 if json.load(open("version.json"))["version"] == "1.9.3" else 1)'; then
+            echo 'installed=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'installed=false' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Reparatur nur bei geprüfter Version 1.9.2 ausführen
+        if: steps.state.outputs.installed == 'false'
+        shell: bash
+        run: |
+          cat > /tmp/vk193_patch.py <<'PY'
+          #!/usr/bin/env python3
+          """VitalKompass 1.9.3 safe incremental repair; source-only.
+          Does not access user health data or browser storage.
+          """
+          from pathlib import Path
+          import hashlib,json,sys
+
+          EXPECTED={
+           'app.js':'d8fdcc5ce93ecac8a42a0dbe9047d6206bdddb57',
+           'sw.js':'89b2fef4e361d91d30eeef7f6dc4455fdf81f79b',
+           'version.json':'b6837006beac4f24354ddcfa9f8312aecb1813af',
+          }
+          def once(src,needle,replacement):
+           count=src.count(needle)
+           if count!=1: raise RuntimeError(f'Quelle geändert! Erwartet genau einen Treffer: {needle[:95]!r}, gefunden: {count}')
+           return src.replace(needle,replacement,1)
+
+          def read(root,fn):
+           raw=(root/fn).read_bytes()
+           actual=hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest()
+           if actual!=EXPECTED[fn]: raise RuntimeError(f'Sicherheitsstopp: {fn} SHA nicht wie erwartet: {actual}')
+           return raw.decode('utf8')
+
+          DRAFT=r'''
+          // Gewichts-Zwischensicherung: nur ein kleines, AES-GCM-verschlüsseltes Objekt.
+          // Bei iOS-Neustarts kann die begonnene Messung nach erneuter Anmeldung gerettet werden.
+          const WEIGHT_DRAFT_KEY='weight-draft-v1';
+          function readWeightDraft(){return new Promise((resolve,reject)=>{const t=db.transaction(STORE,'readonly');const q=t.objectStore(STORE).get(WEIGHT_DRAFT_KEY);q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error);})}
+          function writeWeightDraft(entry){return pack({format:'vk-weight-draft-v1',entry},key).then(envelope=>new Promise((resolve,reject)=>{const t=db.transaction(STORE,'readwrite');t.objectStore(STORE).put(envelope,WEIGHT_DRAFT_KEY);t.oncomplete=resolve;t.onerror=()=>reject(t.error)}))}
+          function clearWeightDraft(){return new Promise((resolve,reject)=>{const t=db.transaction(STORE,'readwrite');t.objectStore(STORE).delete(WEIGHT_DRAFT_KEY);t.oncomplete=resolve;t.onerror=()=>reject(t.error)})}
+          async function recoverWeightDraft(){
+           const envelope=await readWeightDraft();if(!envelope)return false;
+           let draft;try{draft=await unpack(envelope,key)}catch{toast('Eine ältere Gewichtszwischensicherung konnte nicht entschlüsselt werden. Bitte bestehende Einträge prüfen.');return false}
+           const e=draft?.entry;
+           if(draft.format!=='vk-weight-draft-v1'||!e||typeof e.id!=='string'||!dateValid(e.date)||!timeValid(e.time)||!Number.isFinite(e.kg)||e.kg<20||e.kg>400||!Object.prototype.hasOwnProperty.call(bpMealLabels,e.mealTiming)||e.mealTiming==='unknown'||typeof e.note!=='string'||e.note.length>300){toast('Eine unvollständige Zwischensicherung wurde nicht übernommen.');return false}
+           const pos=data.weights.findIndex(w=>w.id===e.id);
+           if(pos<0){
+            const savedWeights=data.weights.map(w=>({...w})),savedWeight=data.profile.weight;
+            data.weights.push(e);syncProfileWeight();
+            try{await save()}catch(err){data.weights=savedWeights;data.profile.weight=savedWeight;throw err}
+           }
+           try{await clearWeightDraft()}catch{}
+           return pos<0;
+          }
+          '''
+
+          def patch_app(s):
+           s=once(s,'/* VitalKompass v1.9.2','/* VitalKompass v1.9.3')
+           s=once(s,"const VERSION='1.9.2'","const VERSION='1.9.3'")
+           s=once(s,'const b64=a=>btoa(Array.from(new Uint8Array(a),x=>String.fromCharCode(x)).join(\'\'));',
+           '''const b64=a=>{const bytes=new Uint8Array(a),chunks=[],size=16384;for(let i=0;i<bytes.length;i+=size)chunks.push(String.fromCharCode(...bytes.subarray(i,i+size)));return btoa(chunks.join(''))};''')
+           s=once(s,'const unb64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));',
+           '''const unb64=s=>{const binary=atob(s),out=new Uint8Array(binary.length);for(let i=0;i<binary.length;i++)out[i]=binary.charCodeAt(i);return out};''')
+           s=once(s,"function putRec(v){return new Promise((resolve,reject)=>{const t=db.transaction(STORE,'readwrite');t.objectStore(STORE).put(v,KEY);t.oncomplete=resolve;t.onerror=()=>reject(t.error)})}",
+           "function putRec(v){return new Promise((resolve,reject)=>{const t=db.transaction(STORE,'readwrite');t.objectStore(STORE).put(v,KEY);t.oncomplete=resolve;t.onerror=()=>reject(t.error)})}"+DRAFT)
+           # Vermeide doppelte speicherintensive IndexedDB-Abfrage nach abgeschlossener Schreibtransaktion.
+           s=once(s,
+           "  if(at>=0)data.weights[at]=entry;else data.weights.push(entry);\n  syncProfileWeight();\n  await save();\n  const stored=await getRec();\n  if(!stored?.cipher||!stored?.iv)throw Error('Speicherprüfung fehlgeschlagen. Der Eintrag wurde nicht bestätigt.');",
+           "  await writeWeightDraft(entry); // Vor dem großen verschlüsselten Datensatz gesichert.\n  if(at>=0)data.weights[at]=entry;else data.weights.push(entry);\n  syncProfileWeight();\n  await save(); // putRec meldet Abschluss erst nach Commit der IndexedDB-Transaktion.\n  try{await clearWeightDraft()}catch{}")
+           # Nach gültiger Eingabe beim App-Start Zwischensicherung wiederherstellen, ohne neue Passwortabfrage.
+           s=once(s,"migrateData();common();return}",
+           "migrateData();let weightRecovered=false;try{weightRecovered=await recoverWeightDraft()}catch(err){toast('Gewichtszwischensicherung konnte nicht wiederhergestellt werden. Bitte Speicherplatz prüfen.')}common();if(weightRecovered)toast('Unterbrochene Gewichtsmessung wiederhergestellt.');return}")
+           # Backup-Import ersetzt Daten: vorhandene temporäre Messung darf später nicht wieder hineinspielen.
+           s=once(s,"view='start';common();toast('Backup wiederhergestellt.');return",
+           "view='start';try{await clearWeightDraft()}catch{}common();toast('Backup wiederhergestellt.');return")
+           # Auch die verschlüsselte temporäre Messung löschen, wenn alle Gesundheitsdaten gelöscht werden.
+           s=once(s,"t.objectStore(STORE).delete(KEY);t.oncomplete=resolve;",
+           "t.objectStore(STORE).delete(KEY);t.objectStore(STORE).delete(WEIGHT_DRAFT_KEY);t.oncomplete=resolve;")
+           return s
+
+          def patch_sw(s):
+           s=once(s,'/* VitalKompass 1.9.2:','/* VitalKompass 1.9.3:')
+           return once(s,"const CACHE='vital-kompass-1.9.2-save-safe';","const CACHE='vital-kompass-1.9.3-sparsame-speicherung';")
+
+          def main():
+           root=Path.cwd()
+           source={fn:read(root,fn) for fn in EXPECTED}
+           ver=json.loads(source['version.json'])
+           if ver['version']!='1.9.2':raise RuntimeError('Nur 1.9.2 als Basis unterstützt.')
+           new={"app.js":patch_app(source['app.js']),"sw.js":patch_sw(source['sw.js'])}
+           ver.update(version='1.9.3',released='2026-10-20',notes='Einmalige Passworteingabe beim App-Start; keine automatische Sperre. Speicherarme iPhone-Verschlüsselung mit verschlüsselter Wiederherstellung unterbrochener Gewichtseinträge. Manuelle Sperre und lokale Verschlüsselung bleiben erhalten.')
+           new['version.json']=json.dumps(ver,ensure_ascii=False,indent=2)+'\n'
+           for name,value in new.items(): (root/name).write_text(value,encoding='utf8')
+           print('VitalKompass 1.9.3 erzeugt; keine privaten Daten verarbeitet.')
+          if __name__=='__main__':main()
+          PY
+          python3 -m py_compile /tmp/vk193_patch.py
+          python3 /tmp/vk193_patch.py
+      - name: Syntax und verschlüsselte Speicherwiederherstellung testen
+        if: steps.state.outputs.installed == 'false'
+        shell: bash
+        run: |
+          node --check app.js
+          node --check sw.js
+          python3 -m json.tool version.json > /dev/null
+          cat > /tmp/vk193_test.js <<'JS'
+          'use strict';
+          const assert=require('node:assert/strict');
+          const fs=require('node:fs');
+          const {webcrypto}=require('node:crypto');
+          const s=fs.readFileSync('app.js','utf8');
+          assert.ok(s.includes("const VERSION='1.9.3'"));
+          assert.ok(s.includes("DB='vitalkompass-secure-v1'"));
+          assert.ok(s.includes('writeWeightDraft(entry)'));
+          assert.ok(s.includes('await recoverWeightDraft()'));
+          assert.ok(s.includes("if(action==='lock')"));
+          assert.ok(!s.includes('autoLock')&&!s.includes('automaticLock'));
+          assert.ok(!s.includes('location.reload()')||s.includes('vkApprovedUpdateReload'));
+          const a=s.indexOf('const b64='),b=s.indexOf('\nfunction save()',a);
+          assert.ok(a>0&&b>a);
+          const {b64,unb64,pack,unpack,passKey}=new Function('crypto',s.slice(a,b)+'\nreturn {b64,unb64,pack,unpack,passKey}')(webcrypto);
+          (async()=>{
+           for(const len of [0,1,15,16383,16384,16385,1024*1024,5*1024*1024]){
+            const input=new Uint8Array(len);for(let i=0;i<len;i++)input[i]=(i*23+7)&255;
+            assert.deepEqual(unb64(b64(input)),input,`Base64 ${len}`);
+           }
+           const key=await passKey('nur-ein-test-passwort',new Uint8Array(16).fill(6));
+           const sample={format:'vk-weight-draft-v1',entry:{id:'test-1',date:'2026-10-20',time:'15:23',kg:130.5,mealTiming:'before_breakfast',note:''}};
+           const packed=await pack(sample,key);assert.deepEqual(await unpack(packed,key),sample);
+           assert.ok(!JSON.stringify(packed).includes('130.5'));
+           const start=s.indexOf("const WEIGHT_DRAFT_KEY='weight-draft-v1';");
+           assert.ok(start>0&&a>start);
+           const draftFunctions=s.slice(start,a);
+           const records=new Map();
+           const db={transaction(){const txn={oncomplete:null,onerror:null,objectStore:()=>({
+            get(k){const req={onsuccess:null,onerror:null,result:undefined};queueMicrotask(()=>{req.result=records.get(k);req.onsuccess?.()});return req},
+            put(value,k){queueMicrotask(()=>{records.set(k,value);txn.oncomplete?.()})},
+            delete(k){queueMicrotask(()=>{records.delete(k);txn.oncomplete?.()})}
+           })};return txn}};
+           const data={weights:[],profile:{weight:''}};
+           let saved=0;
+           const sortdate=(x,y)=>`${x.date}T${x.time}`.localeCompare(`${y.date}T${y.time}`);
+           const syncProfileWeight=()=>{const last=[...data.weights].sort(sortdate).at(-1);data.profile.weight=last?String(last.kg):''};
+           const save=async()=>{saved++};
+           const dateValid=x=>/^\d{4}-\d{2}-\d{2}$/.test(x);
+           const timeValid=x=>/^\d{2}:\d{2}$/.test(x);
+           const bpMealLabels={before_breakfast:'Vor dem Frühstück'};
+           const toast=()=>{};
+           const factory=new Function('db','STORE','data','key','pack','unpack','dateValid','timeValid','bpMealLabels','syncProfileWeight','save','toast',draftFunctions+'\nreturn {writeWeightDraft,readWeightDraft,clearWeightDraft,recoverWeightDraft}');
+           const api=factory(db,'safe',data,key,pack,unpack,dateValid,timeValid,bpMealLabels,syncProfileWeight,save,toast);
+           await api.writeWeightDraft(sample.entry);
+           assert.equal(records.has('weight-draft-v1'),true,'Messung ist zunächst verschlüsselt zwischengespeichert');
+           assert.equal(data.weights.length,0,'Noch keine Hauptspeicherung');
+           assert.equal(await api.recoverWeightDraft(),true,'Unterbrochene Messung wiederhergestellt');
+           assert.equal(data.weights.length,1);
+           assert.equal(data.weights[0].kg,130.5);
+           assert.equal(data.profile.weight,'130.5');
+           assert.equal(saved,1);
+           assert.equal(records.has('weight-draft-v1'),false,'Zwischensicherung entfernt');
+           assert.equal(await api.recoverWeightDraft(),false,'Kein zweiter Eintrag');
+           console.log('1.9.3: Speicherschonendes Base64 (bis 5 MB), AES-GCM, unterbrochene Gewichtssicherung und Duplikatschutz OK.');
+          })().catch(e=>{console.error(e);process.exitCode=1})
+          JS
+          cp /tmp/vk193_test.js ./vk193_test_tmp.js
+          node vk193_test_tmp.js
+          rm vk193_test_tmp.js
+      - name: Fertiges 1.9.3 Update veröffentlichen
+        if: steps.state.outputs.installed == 'false'
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.js sw.js version.json
+          if git diff --cached --quiet; then
+            echo 'Keine Änderungen.'
+          else
+            git commit -m 'VitalKompass 1.9.3: Gewicht sicher speichern und nach iPhone-Neustart wiederherstellen'
+            git push origin HEAD:main
+          fi
