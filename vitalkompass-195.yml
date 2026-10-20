@@ -1,0 +1,199 @@
+name: VitalKompass 1.9.5 - Formularerkennung reparieren
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/vitalkompass-195.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vitalkompass-195-form-id
+  cancel-in-progress: false
+
+jobs:
+  fix-test-install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Programmdateien laden
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          fetch-depth: 1
+
+      - name: Version pruefen
+        id: status
+        shell: bash
+        run: |
+          if python3 -c 'import json; raise SystemExit(0 if json.load(open("version.json",encoding="utf-8"))["version"] == "1.9.5" else 1)'; then
+            echo 'installed=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'installed=false' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Gezielten Formularfix erstellen
+        if: steps.status.outputs.installed == 'false'
+        shell: bash
+        run: |
+          cat > /tmp/vk195_patch.py <<'PY'
+          from pathlib import Path
+          import hashlib, json
+
+          EXPECTED = {
+              'app.js': 'f8f57f13f9c4398ccf6285afd36b92b4f044ee58',
+              'sw.js': 'e5c036ad48cae1952af60508b4a381fc97a24c8d',
+              'version.json': 'a9abd3ad2a6520dc8e8374b10eb1b5c360541d26',
+          }
+
+          def read_checked(path):
+              payload = Path(path).read_bytes()
+              blob = hashlib.sha1(b'blob ' + str(len(payload)).encode() + b'\0' + payload).hexdigest()
+              if blob != EXPECTED[path]:
+                  raise RuntimeError(f'Quellcode von {path} geaendert (SHA {blob}); keine automatische Aenderung.')
+              return payload.decode('utf-8')
+
+          def once(text, old, new):
+              count = text.count(old)
+              if count != 1:
+                  raise RuntimeError(f'Unbekannte Codebasis; Anker {old!r}: {count} Treffer statt genau einem.')
+              return text.replace(old,new,1)
+
+          app = read_checked('app.js')
+          sw = read_checked('sw.js')
+          metadata = json.loads(read_checked('version.json'))
+          if metadata['version'] != '1.9.4':
+              raise RuntimeError('Nur Version 1.9.4 darf aktualisiert werden.')
+          # HTMLFormElement named properties: <input name="id"> ueberschattet form.id.
+          # Das betrifft alle Formular-Submit-Abfragen sowie den neuen Gewichts-Button.
+          if app.count('form.id') != 31:
+              raise RuntimeError('Die Anzahl der betroffenen Formulare hat sich geaendert.')
+          app = app.replace('form.id', "form.getAttribute('id')")
+          app = once(app,
+              "saveWeightDedicated($('#weight-form'))",
+              "saveWeightDedicated(el.closest('form') || $('#weight-form'))")
+          app = once(app, '/* VitalKompass v1.9.4', '/* VitalKompass v1.9.5')
+          app = once(app, "const VERSION='1.9.4'", "const VERSION='1.9.5'")
+          if 'form.id' in app:
+              raise RuntimeError('Mindestens eine fehlerhafte Formularpruefung verblieben.')
+          sw = once(sw, '/* VitalKompass 1.9.4:', '/* VitalKompass 1.9.5:')
+          sw = once(sw, "const CACHE='vital-kompass-1.9.4-weight-journal';",
+              "const CACHE='vital-kompass-1.9.5-form-id-fix';")
+          metadata.update({
+              'version':'1.9.5',
+              'released':'2026-10-20',
+              'notes':('Korrektur der HTML-Formularerkennung auf iPhone/Safari: ein verstecktes Feld name=id '
+                       'ueberschrieb form.id. Alle Formulare lesen die Kennung nun ueber getAttribute aus. '
+                       'Gewicht wird per normalem Button und getrennt verschluesselt gespeichert. '
+                       'Passwort nur beim Start oder manuellem Sperren; kein automatisches Sperren.')
+          })
+          Path('app.js').write_text(app,encoding='utf-8')
+          Path('sw.js').write_text(sw,encoding='utf-8')
+          Path('version.json').write_text(json.dumps(metadata,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          print('31 betroffene form.id-Zugriffe korrigiert; Gewichtsbutton dem richtigen Form-Element zugeordnet.')
+          PY
+          python3 /tmp/vk195_patch.py
+
+      - name: Syntax und Funktionen testen
+        if: steps.status.outputs.installed == 'false'
+        shell: bash
+        run: |
+          node --check app.js
+          node --check sw.js
+          python3 -m json.tool version.json > /dev/null
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          app=Path('app.js').read_text(encoding='utf-8')
+          sw=Path('sw.js').read_text(encoding='utf-8')
+          assert json.loads(Path('version.json').read_text(encoding='utf-8'))['version']=='1.9.5'
+          assert 'form.id' not in app
+          assert "if(!form||form.getAttribute('id')!=='weight-form')" in app
+          assert "if(!form.getAttribute('id')||!form.getAttribute('id').endsWith('-form'))return;" in app
+          assert "saveWeightDedicated(el.closest('form') || $('#weight-form'))" in app
+          assert 'data-action="save-weight"' in app
+          assert "WEIGHT_JOURNAL_KEY='weight-journal-v1'" in app
+          assert "DB='vitalkompass-secure-v1'" in app
+          assert "if(action==='backup')" in app
+          assert "if(action==='lock')" in app
+          assert "autoLock" not in app and "automaticLock" not in app
+          assert 'then(()=>self.skipWaiting())' not in sw
+          assert "const CACHE='vital-kompass-1.9.5-form-id-fix';" in sw
+          print('Formularerkennung, Tresor, Backup, manuelle Sperre, Update-Caching: OK')
+          PY
+          cat > /tmp/vk195_test.js <<'JS'
+          'use strict';
+          const assert = require('node:assert/strict');
+          const fs = require('node:fs');
+          const vm = require('node:vm');
+          const source = fs.readFileSync('app.js', 'utf8');
+          const a = source.indexOf('async function saveWeightDedicated(form){');
+          const b = source.indexOf('/* VK194 SAVE END */', a);
+          assert.ok(a>=0 && b>a, 'Echte Gewichtsfunktion fehlt');
+          const actual = source.slice(a,b);
+          const persisted=[];
+          let idSeq=0;
+          const feedback={textContent:'',classList:{remove(){},add(){}}};
+          const button={disabled:false,textContent:'Gewicht speichern',isConnected:true};
+          const form={
+            id:{name:'id',value:'',type:'hidden'}, // Browser: form.id ist ein INPUT, kein String.
+            getAttribute:n=>n==='id'?'weight-form':null,
+            values:{id:'',kg:'130,5',date:'2026-10-20',time:'16:40',mealTiming:'before_breakfast',note:'Nuechtern'},
+            querySelector:()=>button,
+          };
+          const sandbox={
+            weightSaveInProgress:false,
+            FormData:class FormDataStub{constructor(f){this.f=f;}get(k){return this.f.values[k]??null;}},
+            nval:v=>v==null||v===''?NaN:Number(String(v).replace(',','.')),
+            dateValid:s=>/^\d{4}-\d\d-\d\d$/.test(s),
+            timeValid:s=>/^([01]\d|2[0-3]):[0-5]\d$/.test(s),
+            today:()=> '2026-10-20',
+            nf:(v,n=1)=>Number(v).toFixed(n),
+            bpMealLabels:{before_breakfast:'Vor dem Fruehstueck'},
+            data:{weights:[],profile:{weight:''}},
+            id:()=> `record-${++idSeq}`,
+            $:selector=>selector==='#weight-save-feedback'?feedback:null,
+            writeWeightDraft:async entry=>{},
+            storeWeightJournal:async rows=>{persisted.push(JSON.parse(JSON.stringify(rows)));},
+            syncProfileWeight:()=>{sandbox.data.profile.weight=String(sandbox.data.weights.at(-1)?.kg||'');},
+            clearWeightDraft:async()=>{},
+            renderMain:()=>{},toast:()=>{},
+          };
+          vm.createContext(sandbox);
+          vm.runInContext(actual+'\nglobalThis.testSave=saveWeightDedicated;',sandbox);
+          (async()=>{
+            assert.equal(typeof form.id,'object','Das Problem muss reproduziert werden');
+            await sandbox.testSave(form);
+            assert.equal(sandbox.data.weights.length,1);
+            assert.equal(sandbox.data.weights[0].kg,130.5);
+            assert.equal(persisted.length,1);
+            assert.equal(persisted[0][0].kg,130.5);
+            form.values.id=sandbox.data.weights[0].id;
+            form.values.kg='131.2';
+            await sandbox.testSave(form);
+            assert.equal(sandbox.data.weights.length,1,'Bearbeitung darf kein Duplikat erzeugen');
+            assert.equal(sandbox.data.weights[0].kg,131.2);
+            form.values.kg='abc';
+            await assert.rejects(()=>sandbox.testSave(form),/Gewicht/);
+            assert.equal(sandbox.data.weights[0].kg,131.2,'Ungueltige Eingabe unveraendert');
+            console.log('Echte saveWeightDedicated-Funktion: verstecktes Feld name=id, Speichern, Bearbeiten, DE-Komma, Punkt, Validierung OK');
+          })().catch(e=>{console.error(e);process.exitCode=1});
+          JS
+          node /tmp/vk195_test.js
+
+      - name: Getestete App installieren
+        if: steps.status.outputs.installed == 'false'
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.js sw.js version.json
+          if git diff --cached --quiet; then
+            echo 'Keine Anpassung erforderlich.'
+          else
+            git commit -m 'VitalKompass 1.9.5: iPhone Formular-ID ohne Namenskonflikt'
+            git push origin HEAD:main
+          fi
