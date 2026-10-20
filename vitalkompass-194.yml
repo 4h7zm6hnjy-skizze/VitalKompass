@@ -1,0 +1,255 @@
+name: VitalKompass 1.9.4 - iPhone Gewichtsspeicherung
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/vitalkompass-194.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vitalkompass-194-weight-journal
+  cancel-in-progress: false
+
+jobs:
+  build-test-and-install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Quellcode laden
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: true
+      - name: Installationsstand feststellen
+        id: state
+        shell: bash
+        run: |
+          if python3 -c 'import json; raise SystemExit(0 if json.load(open("version.json"))["version"] == "1.9.4" else 1)'; then
+            echo 'installed=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'installed=false' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Geprueften Code reparieren
+        if: steps.state.outputs.installed == 'false'
+        shell: bash
+        run: |
+          cat > /tmp/vk194_patch.py <<'PY'
+          #!/usr/bin/env python3
+          """VitalKompass 1.9.4 - isolated encrypted weight journal + button click instead of form submit.
+          User health records never touched. Applies only to fingerprinted 1.9.3 code. 
+          """
+          from pathlib import Path
+          import hashlib,json,sys
+
+          ROOT=Path.cwd()
+          EXPECTED={
+           'app.js':'e7984e5bf5839c9c4d8f903a0d97a6e049791119',
+           'sw.js':'e8bd57a9d5cb9f2a73bf1b440819ec008084a6ce',
+           'version.json':'0a8f8b1636ec819262a74a65f7456a32f0fd4e16',
+          }
+
+          def read(name):
+           raw=(ROOT/name).read_bytes()
+           sha=hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest()
+           if sha!=EXPECTED[name]: raise RuntimeError(f'Quellcode für {name} hat sich verändert (SHA {sha}); Abbruch ohne Änderung.')
+           return raw.decode('utf-8')
+
+          def once(source,original,replacement):
+           matches=source.count(original)
+           if matches!=1:raise RuntimeError(f'Sicherheitsabbruch: Quellanker {original[:110]!r} kommt {matches}x vor statt 1x')
+           return source.replace(original,replacement,1)
+
+          JOURNAL='''/* VK194 JOURNAL BEGIN: Separat verschlüsselter Gewichtsspeicher. */
+          const WEIGHT_JOURNAL_KEY='weight-journal-v1';
+          function getWeightJournalRec(){return new Promise((resolve,reject)=>{const t=db.transaction(STORE,'readonly');const q=t.objectStore(STORE).get(WEIGHT_JOURNAL_KEY);q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error)})}
+          async function storeWeightJournal(rows){
+           if(!key||!Array.isArray(rows)||rows.length>50000)throw Error('Gewichtsspeicher nicht verfügbar.');
+           const envelope=await pack({format:'vk-weight-journal-v1',rows},key);
+           await new Promise((resolve,reject)=>{const t=db.transaction(STORE,'readwrite');t.objectStore(STORE).put(envelope,WEIGHT_JOURNAL_KEY);t.oncomplete=resolve;t.onerror=()=>reject(t.error)});
+           const saved=await getWeightJournalRec();
+           if(!saved?.cipher||!saved?.iv)throw Error('Gewichtsspeicher konnte nicht bestätigt werden.');
+           const restored=await unpack(saved,key);
+           if(restored?.format!=='vk-weight-journal-v1'||!Array.isArray(restored.rows)||restored.rows.length!==rows.length||!restored.rows.every((r,i)=>r.id===rows[i].id&&r.kg===rows[i].kg&&r.date===rows[i].date&&r.time===rows[i].time))throw Error('Gewichtsspeicherprüfung fehlgeschlagen.');
+          }
+          async function loadWeightJournal(){
+           const saved=await getWeightJournalRec();if(!saved)return false;
+           const restored=await unpack(saved,key);
+           if(restored?.format!=='vk-weight-journal-v1'||!Array.isArray(restored.rows)||restored.rows.length>50000||!restored.rows.every(r=>r&&typeof r.id==='string'&&dateValid(r.date)&&timeValid(r.time)&&Number.isFinite(r.kg)&&r.kg>=20&&r.kg<=400&&Object.prototype.hasOwnProperty.call(bpMealLabels,r.mealTiming)&&r.mealTiming!=='unknown'&&(r.note===undefined||typeof r.note==='string')))throw Error('Gewichtsspeicher enthält ungültige Daten.');
+           data.weights=restored.rows;
+           syncProfileWeight();return true;
+          }
+          /* VK194 JOURNAL END */
+          '''
+
+          DEDICATED='''/* VK194 SAVE BEGIN: Kein HTML-Submit und keine Komplettverschlüsselung beim Wiegen. */
+          async function saveWeightDedicated(form){
+           if(weightSaveInProgress)return;
+           if(!form||form.id!=='weight-form')throw Error('Gewichtsformular nicht gefunden.');
+           const f=new FormData(form),kg=nval(f.get('kg')),date=String(f.get('date')||''),time=String(f.get('time')||''),meal=String(f.get('mealTiming')||''),entryId=String(f.get('id')||'');
+           if(!Number.isFinite(kg)||kg<20||kg>400)throw Error('Bitte ein Gewicht zwischen 20 und 400 kg eingeben (z. B. 130,5).');
+           if(!dateValid(date)||date>today()||!timeValid(time))throw Error('Datum und Uhrzeit prüfen.');
+           if(meal==='unknown'||!Object.prototype.hasOwnProperty.call(bpMealLabels,meal))throw Error('Bitte einen Messzeitpunkt wählen.');
+           const entry={id:entryId||id(),date,time,kg:Math.round(kg*10)/10,mealTiming:meal,note:String(f.get('note')||'').slice(0,300)};
+           const at=data.weights.findIndex(x=>x.id===entryId);
+           if(entryId&&at<0)throw Error('Der ursprüngliche Gewichtseintrag wurde nicht gefunden.');
+           const next=data.weights.map(x=>({...x}));if(at>=0)next[at]=entry;else next.push(entry);
+           const feedback=$('#weight-save-feedback'),button=form.querySelector('[data-action="save-weight"]');
+           weightSaveInProgress=true;
+           if(feedback){feedback.textContent='Gewicht wird sicher gespeichert …';feedback.classList.remove('vk-save-error')}
+           if(button){button.disabled=true;button.textContent='Speichert …'}
+           try{
+            await writeWeightDraft(entry);
+            await storeWeightJournal(next);
+            data.weights=next;syncProfileWeight();
+            try{await clearWeightDraft()}catch{}
+            renderMain();toast('Gewicht verschlüsselt gespeichert: '+nf(entry.kg,1)+' kg.');
+           }finally{
+            weightSaveInProgress=false;
+            if(button?.isConnected){button.disabled=false;button.textContent='Gewicht speichern'}
+           }
+          }
+          /* VK194 SAVE END */
+          '''
+
+          s=read('app.js');sw=read('sw.js');v=json.loads(read('version.json'))
+          if v['version']!='1.9.3':raise RuntimeError('Falsche Ausgangsversion')
+          s=once(s,'/* VitalKompass v1.9.3','/* VitalKompass v1.9.4')
+          s=once(s,"const VERSION='1.9.3'", "const VERSION='1.9.4'")
+          s=once(s,"const WEIGHT_DRAFT_KEY='weight-draft-v1';", "const WEIGHT_DRAFT_KEY='weight-draft-v1';\n"+JOURNAL)
+          s=once(s,"<button class=\"primary\" type=\"submit\">Gewicht speichern</button>","<button class=\"primary\" type=\"button\" data-action=\"save-weight\">Gewicht speichern</button>")
+          s=once(s,"async function handleSubmit(ev){", DEDICATED+"\nasync function handleSubmit(ev){")
+          start=s.index("if(form.id==='weight-form'){")
+          end=s.index("if(form.id==='glucose-form'){",start)
+          if s[start:end].count('await writeWeightDraft(entry)')!=1 or s[start:end].count('await save()')!=1:raise RuntimeError('Unsicher: Form Handler weicht von 1.9.3 ab')
+          s=s[:start]+"if(form.id==='weight-form'){await saveWeightDedicated(form);return}\n"+s[end:]
+          s=once(s,"migrateData();let weightRecovered=false;try{weightRecovered=await recoverWeightDraft()}","migrateData();try{await loadWeightJournal()}catch(err){toast('Separates Gewichtstagebuch kann derzeit nicht geöffnet werden. Bestehende Daten bleiben unverändert.')}let weightRecovered=false;try{weightRecovered=await recoverWeightDraft()}")
+          s=once(s,"try{await save()}catch(err){data.weights=savedWeights;data.profile.weight=savedWeight;throw err}","try{await storeWeightJournal(data.weights)}catch(err){data.weights=savedWeights;data.profile.weight=savedWeight;throw err}")
+          s=once(s,"data[bucket]=data[bucket].filter(x=>x.id!==idv);if(bucket==='weights')syncProfileWeight();await save();renderMain();toast('Eintrag gelöscht.');return",
+          "if(bucket==='weights'){const next=data.weights.filter(x=>x.id!==idv);await storeWeightJournal(next);data.weights=next;syncProfileWeight();renderMain();toast('Gewichtseintrag gelöscht.');return}data[bucket]=data[bucket].filter(x=>x.id!==idv);await save();renderMain();toast('Eintrag gelöscht.');return")
+          s=once(s,"if(action==='lock'){await saveQueue;", "if(action==='save-weight'){try{await saveWeightDedicated($('#weight-form'))}catch(error){const target=$('#weight-save-feedback');if(target){target.textContent=error.message||'Gewicht konnte nicht gespeichert werden.';target.classList.add('vk-save-error')}alert(error.message||'Gewicht konnte nicht gespeichert werden.')}return}\nif(action==='lock'){await saveQueue;")
+          # Restore backup must replace journal, otherwise a previous journal supersedes the imported weights.
+          s=once(s,"try{await save()}catch(e){data=previousData;throw e}view='start';try{await clearWeightDraft()}catch{}common();toast('Backup wiederhergestellt.');return",
+          "try{await save();await storeWeightJournal(data.weights)}catch(e){data=previousData;throw e}view='start';try{await clearWeightDraft()}catch{}common();toast('Backup wiederhergestellt.');return")
+          # Deleting all health data must remove journal too
+          s=once(s,"t.objectStore(STORE).delete(KEY);t.objectStore(STORE).delete(WEIGHT_DRAFT_KEY);",
+          "t.objectStore(STORE).delete(KEY);t.objectStore(STORE).delete(WEIGHT_DRAFT_KEY);t.objectStore(STORE).delete(WEIGHT_JOURNAL_KEY);")
+          # Extra native submit protection: the dedicated weight button does not submit any form.
+          # Backup handling remains the original encrypted full-data format and includes weights from data after hydration.
+          sw=once(sw,"/* VitalKompass 1.9.3:","/* VitalKompass 1.9.4:")
+          sw=once(sw,"const CACHE='vital-kompass-1.9.3-sparsame-speicherung';","const CACHE='vital-kompass-1.9.4-weight-journal';")
+          v['version']='1.9.4';v['released']='2026-10-20';v['notes']='Gewicht über echten Button-Klick ohne Formular-Neustart speichern; separater lokal verschlüsselter Gewichtsspeicher statt kompletter Neuverschlüsselung. Passwort beim App-Start bzw. manueller Sperre. Import und Backup kompatibel.'
+          for name,body in [('app.js',s),('sw.js',sw),('version.json',json.dumps(v,ensure_ascii=False,indent=2)+'\n')]:
+           (ROOT/name).write_text(body,encoding='utf-8')
+           print('Aktualisiert:',name,len(body))
+          PY
+          python3 -m py_compile /tmp/vk194_patch.py
+          python3 /tmp/vk194_patch.py
+      - name: Syntax und Speichersicherheit pruefen
+        if: steps.state.outputs.installed == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check app.js
+          node --check sw.js
+          python3 -m json.tool version.json >/dev/null
+          test "$(python3 -c 'import json;print(json.load(open("version.json"))["version"])')" = '1.9.4'
+          if grep -q 'then(()=>self.skipWaiting())' sw.js; then echo 'Unerwuenschter Auto-Reload' && exit 1; fi
+          if grep -Eq 'autoLock|automaticLock' app.js; then echo 'Unerwuenschte automatische Sperre' && exit 1; fi
+          cat > /tmp/vk194_test.js <<'JS'
+          'use strict';
+          const fs=require('node:fs');
+          const assert=require('node:assert/strict');
+          const source=fs.readFileSync(process.argv[2],'utf8');
+          function part(start,end){const a=source.indexOf(start),b=source.indexOf(end,a);if(a<0||b<0)throw Error('Marker fehlt: '+start);return source.slice(a,b)}
+          const journal=part('/* VK194 JOURNAL BEGIN','/* VK194 JOURNAL END */');
+          const entrySave=part('/* VK194 SAVE BEGIN','/* VK194 SAVE END */');
+          const draft=source.includes('function readWeightDraft()')?part('function readWeightDraft()','async function recoverWeightDraft()'):'';
+          const cryptoFns=source.includes('const b64=')?part('const b64=','function save(){'):'';
+          assert.match(source, /data-action="save-weight">Gewicht speichern<\/button>/);
+          assert.doesNotMatch(source,/type="submit">Gewicht speichern<\/button>/);
+          assert.match(source, /if\(action==='save-weight'\)/);
+          assert.match(source,/migrateData\(\);try\{await loadWeightJournal\(\)\}/);
+          assert.match(source,/if\(bucket==='weights'\)\{const next=.*?await storeWeightJournal\(next\)/);
+          assert.match(source,/await save\(\);await storeWeightJournal\(data.weights\)/);
+          assert.match(source,/delete\(WEIGHT_JOURNAL_KEY\)/);
+          assert.doesNotMatch(source,/autoLock|automaticLock/);
+          assert.doesNotMatch(entrySave,/await save\(\)/);
+
+          const harness=`
+          const assert=require('node:assert/strict');
+          const crypto=require('node:crypto').webcrypto;
+          const STORE='safe';
+          const WEIGHT_DRAFT_KEY='weight-draft-v1';
+          const records=new Map();
+          let data={weights:[],profile:{weight:''}};
+          let key=null;let nextId=0;let weightSaveInProgress=false;let saveCalls=0;let renderCount=0;
+          let failJournal=false;
+          const today=()=> '2026-10-20';
+          const nval=v=>v===null||v===undefined||v===''?NaN:Number(String(v).replace(',','.'));
+          const dateValid=s=>/^\\d{4}-\\d{2}-\\d{2}$/.test(s);
+          const timeValid=s=>/^([01]\\d|2[0-3]):[0-5]\\d$/.test(s);
+          const bpMealLabels={before_breakfast:'Vor dem Frühstück',after_breakfast:'Nach dem Frühstück',after_lunch:'Nach dem Mittagessen'};
+          const id=()=>String(++nextId);
+          function syncProfileWeight(){const sorted=[...data.weights].sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));const last=sorted.at(-1);data.profile.weight=last?String(last.kg):''}
+          const nf=(v,d)=>v.toFixed(d);
+          function toast(s){}
+          function renderMain(){renderCount++}
+          const $=()=>({textContent:'',classList:{remove(){},add(){}}});
+          class FormData{constructor(form){this.values=form.values}get(key){return this.values[key]??null}}
+          const db={transaction(){const t={oncomplete:null,onerror:null,objectStore(){return {get(name){let q={};queueMicrotask(()=>{q.result=records.get(name);q.onsuccess?.()});return q},put(value,name){queueMicrotask(()=>{if(name==='weight-journal-v1'&&failJournal){t.onerror?.(Error('simulierter Fehler'));return}records.set(name,value);t.oncomplete?.()})},delete(name){queueMicrotask(()=>{records.delete(name);t.oncomplete?.()})}}}};return t}};
+          __CRYPTO__
+          __DRAFT__
+          __JOURNAL__
+          __SAVE__
+          function event(kg,id=''){return {id,kg,date:'2026-10-20',time:'11:20',mealTiming:'before_breakfast',note:''}}
+          function form(x){return {id:'weight-form',values:x,querySelector(){return {disabled:false,textContent:'Gewicht speichern',isConnected:true}}}}
+          (async()=>{
+           key=await crypto.subtle.generateKey({name:'AES-GCM',length:256},false,['encrypt','decrypt']);
+           data.syntheticLargeMedicalArchive='x'.repeat(4*1024*1024);
+           const one=form(event('130,5'));
+           await saveWeightDedicated(one);
+           assert.equal(data.weights.length,1);assert.equal(data.weights[0].kg,130.5);assert.equal(data.profile.weight,'130.5');
+           assert.equal(saveCalls,0,'Großer Datentresor darf nicht neu verschlüsselt werden');
+           assert.ok(records.has('weight-journal-v1'),'Separater AES-Speicher existiert');
+           assert.ok(records.get('weight-journal-v1').cipher.length<4000,'Gesamte Krankenakte darf nicht im Gewichtsspeicher verschlüsselt werden');
+           assert.ok(!JSON.stringify(records.get('weight-journal-v1')).includes('130.5'),'Kein Gewicht im Klartext');
+           let frozen=JSON.stringify(data.weights);data.weights=[];data.profile.weight='';
+           assert.equal(await loadWeightJournal(),true);assert.equal(JSON.stringify(data.weights),frozen,'Neustart-Wiederherstellung');
+           await saveWeightDedicated(form(event('129,8','1')));
+           assert.equal(data.weights.length,1);assert.equal(data.weights[0].kg,129.8);
+           for(const invalid of ['', 'abc', '19,9', '400,1']){await assert.rejects(()=>saveWeightDedicated(form(event(invalid))));assert.equal(data.weights.length,1)}
+           failJournal=true;await assert.rejects(()=>saveWeightDedicated(form(event('125,1'))));
+           assert.equal(data.weights.length,1,'Speicherfehler darf nicht als Erfolg angezeigt werden');failJournal=false;
+           assert.ok(records.has('weight-draft-v1'),'Fehler-Zwischensicherung bleibt verschlüsselt erhalten');
+           await saveWeightDedicated(form(event('130.5')));
+           assert.equal(data.weights.length,2); assert.equal(data.weights[1].kg,130.5);
+           assert.equal(records.has('weight-draft-v1'),false,'Erfolgreicher Speichervorgang räumt Zwischenstand auf');
+           await storeWeightJournal([]);data.weights=[];
+           assert.equal(await loadWeightJournal(),true);assert.equal(data.weights.length,0,'Löschen bleibt auch nach Neustart erhalten');
+           console.log('OK: Deutsches Komma, Punkt, AES-GCM, Klick ohne Submit, separate Journalspeicherung, Neustart, Bearbeiten, Fehler, Löschen, Backup-Anker.');
+          })().catch(e=>{console.error(e);process.exitCode=1});
+          `.replace('__CRYPTO__',cryptoFns).replace('__DRAFT__',draft).replace('__JOURNAL__',journal).replace('__SAVE__',entrySave);
+          const tmp=process.argv[2]+'.test.tmp.js';fs.writeFileSync(tmp,harness);
+          const {spawnSync}=require('node:child_process');
+          let r=spawnSync(process.execPath,['--check',tmp],{encoding:'utf8'});if(r.status!==0){console.error(r.stderr);process.exit(1)}
+          r=spawnSync(process.execPath,[tmp],{encoding:'utf8'});console.log(r.stdout||'');if(r.status!==0){console.error(r.stderr);process.exit(1)}
+          fs.unlinkSync(tmp);
+          JS
+          node /tmp/vk194_test.js app.js
+      - name: Getestete Version installieren
+        if: steps.state.outputs.installed == 'false'
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.js sw.js version.json
+          if git diff --cached --quiet; then
+            echo 'Keine Aenderungen notwendig.'
+          else
+            git commit -m 'VitalKompass 1.9.4: Gewicht ohne Formularreload separat verschluesselt speichern'
+            git push origin HEAD:main
+          fi
