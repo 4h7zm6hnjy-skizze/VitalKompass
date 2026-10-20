@@ -1,5 +1,5 @@
 {
-  "version": "1.9.6",
+  "version": "1.9.7",
   "released": "2026-10-20",
-  "notes": "Datenintegrität: atomare Backup-Wiederherstellung von Tresor und Gewichtstagebuch; geschützter Nur-Lesen-Modus bei beschädigtem Gewichtsjournal; Wiederherstellung bearbeiteter Gewichtseinträge; iPhone-Dezimalkomma bei Gewichtszielen. Passwort nur beim App-Start oder manuellem Sperren. Keine Gesundheitsdaten auf GitHub."
+  "notes": "Intensivprüfung: Schutz vor parallelen Gewichtsspeicher-/Sperr-/Backup-Aktionen; Rollback bei fehlgeschlagenen Blutdruck-, Blutzucker-, Asthma-, Lösch- und Erinnerungsvorgängen; optionale Pulsprüfung; iPhone-Dezimalkomma für Laborwerte und barrierefreies Zoomen. Lokale Verschlüsselung bleibt; keine automatische Sperre."
 }
