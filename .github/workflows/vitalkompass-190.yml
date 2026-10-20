@@ -1,0 +1,94 @@
+name: VitalKompass 1.9.0 Gesamtupdate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/vitalkompass-190.yml'
+      - 'upgrade_vitalkompass_190.py'
+      - 'vk190_features.js'
+      - 'vk190_styles.css'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vitalkompass-190-upgrade
+  cancel-in-progress: false
+
+jobs:
+  build-and-install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Repository laden
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: true
+
+      - name: Installationsstatus feststellen
+        id: state
+        shell: bash
+        run: |
+          if python3 -c 'import json; exit(0 if json.load(open("version.json"))["version"] == "1.9.0" else 1)'; then
+            echo 'installed=true' >> "$GITHUB_OUTPUT"
+            echo 'VitalKompass 1.9.0 ist bereits installiert.'
+          else
+            echo 'installed=false' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Vorbedingungen und Quelldateien pruefen
+        if: steps.state.outputs.installed == 'false'
+        shell: bash
+        run: |
+          test -s upgrade_vitalkompass_190.py
+          test -s vk190_features.js
+          test -s vk190_styles.css
+          python3 -m py_compile upgrade_vitalkompass_190.py
+          node --check vk190_features.js
+          python3 upgrade_vitalkompass_190.py
+
+      - name: Generierte Dateien testen
+        if: steps.state.outputs.installed == 'false'
+        shell: bash
+        run: |
+          node --check GitHub_Upload_1.9.0/app.js
+          node --check GitHub_Upload_1.9.0/sw.js
+          python3 -m json.tool GitHub_Upload_1.9.0/version.json > /dev/null
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          p = Path('GitHub_Upload_1.9.0')
+          app = (p / 'app.js').read_text(encoding='utf-8')
+          version = json.loads((p / 'version.json').read_text(encoding='utf-8'))
+          required = ['function pageAsthma', 'function pageDoctorReport',
+                      'function vkPeriodComparison', 'function vkWeightGoal',
+                      'function vkMedStockPanel', 'backup-share', 'backup-download',
+                      '32*1024*1024', 'vk-bottom-nav']
+          assert version['version'] == '1.9.0'
+          for word in required:
+              assert word in app, f'Fehlt: {word}'
+          assert 'autoLock' not in app
+          assert 'automaticLock' not in app
+          print('Version, Module, Backup-Import und Ausschluss automatischer Sperre geprüft.')
+          PY
+
+      - name: Update installieren
+        if: steps.state.outputs.installed == 'false'
+        shell: bash
+        run: |
+          cp GitHub_Upload_1.9.0/app.js app.js
+          cp GitHub_Upload_1.9.0/style.css style.css
+          cp GitHub_Upload_1.9.0/sw.js sw.js
+          cp GitHub_Upload_1.9.0/version.json version.json
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.js style.css sw.js version.json
+          if git diff --cached --quiet; then
+            echo 'Keine Dateien zu ändern.'
+          else
+            git commit -m 'VitalKompass 1.9.0: kombiniertes Update ohne automatische Sperre'
+            git push origin HEAD:main
+          fi
