@@ -1,5 +1,5 @@
 {
-  "version": "1.9.2",
+  "version": "1.9.3",
   "released": "2026-10-20",
-  "notes": "Stabilisierung der Gewichtsspeicherung unter iOS. Kein automatischer Service-Worker-Neustart, während die App geöffnet ist; sichtbarer Speicherstatus und lokale Speicherprüfung. Keine automatische Sperre."
+  "notes": "Einmalige Passworteingabe beim App-Start; keine automatische Sperre. Speicherarme iPhone-Verschlüsselung mit verschlüsselter Wiederherstellung unterbrochener Gewichtseinträge. Manuelle Sperre und lokale Verschlüsselung bleiben erhalten."
 }
