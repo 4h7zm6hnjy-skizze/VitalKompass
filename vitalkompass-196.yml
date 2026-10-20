@@ -1,0 +1,238 @@
+name: VitalKompass 1.9.6 - Sicherheit und Datenintegritaet
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/vitalkompass-196.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vitalkompass-196-install
+  cancel-in-progress: false
+
+jobs:
+  check-fix-and-install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Aktuellen GitHub-Code laden
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: true
+      - name: Bereits installierte Version erkennen
+        id: state
+        shell: bash
+        run: |
+          if python3 -c 'import json; raise SystemExit(0 if json.load(open("version.json"))["version"] == "1.9.6" else 1)'; then
+            echo 'installed=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'installed=false' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Gepruefte Quelldateien sicher aktualisieren
+        if: steps.state.outputs.installed == 'false'
+        shell: bash
+        run: |
+          cat > /tmp/vk196_patch.py <<'PY'
+          #!/usr/bin/env python3
+          """VitalKompass 1.9.6: conservatively patch only known 1.9.5 code.
+          
+          Build-time only; no handling of patient data. The running app keeps its
+          existing AES-GCM data model, password login and user-controlled locking.
+          """
+          from pathlib import Path
+          import hashlib, json
+          
+          FILES = {
+              'app.js': '93ca17fcc923ecc4080dd247de70bb971c373a30',
+              'sw.js': '5af90b0b9f9de4063c78aa28e26ae071b7e0ed27',
+              'version.json': '6612740b265bf37e06c5100f5c7fcc9a0a1d6b25',
+          }
+          
+          def get(path):
+              raw=Path(path).read_bytes()
+              sha=hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest()
+              if sha != FILES[path]:
+                  raise RuntimeError(f'Abbruch: {path} hat sich seit der Prüfung verändert ({sha}).')
+              return raw.decode('utf-8')
+          
+          def once(source,old,new):
+              n=source.count(old)
+              if n!=1: raise RuntimeError(f'Abbruch: Erwartet genau 1 Fundstelle für {old[:100]!r}, gefunden {n}.')
+              return source.replace(old,new,1)
+          
+          app=get('app.js'); sw=get('sw.js'); version=json.loads(get('version.json'))
+          if version['version']!='1.9.5':raise RuntimeError('Abbruch: Nicht Version 1.9.5')
+          app=once(app,'/* VitalKompass v1.9.5','/* VitalKompass v1.9.6')
+          app=once(app,"const VERSION='1.9.5'", "const VERSION='1.9.6'")
+          app=once(app,"const WEIGHT_JOURNAL_KEY='weight-journal-v1';", "const WEIGHT_JOURNAL_KEY='weight-journal-v1';\nlet weightJournalReadOnly=false; // Sperrt Schreiben, falls ein vorhandenes Tagebuch nicht lesbar ist.")
+          
+          RESTORE_HELPER='''
+          /* VK196 BEGIN: Tresor und Gewichtstagebuch nur zusammen ersetzen. */
+          async function persistRestoredVault(restored){
+           if(!key)throw Error('App ist gesperrt.');
+           const existing=await getRec();
+           if(!existing?.salt)throw Error('Vorhandener Passwort-Tresor ist nicht erreichbar.');
+           const vaultEnvelope=await pack(restored,key);
+           const journalEnvelope=await pack({format:'vk-weight-journal-v1',rows:restored.weights||[]},key);
+           await new Promise((resolve,reject)=>{
+            const tx=db.transaction(STORE,'readwrite');
+            const items=tx.objectStore(STORE);
+            items.put({...existing,...vaultEnvelope,modified:new Date().toISOString()},KEY);
+            items.put(journalEnvelope,WEIGHT_JOURNAL_KEY);
+            items.delete(WEIGHT_DRAFT_KEY);
+            tx.oncomplete=resolve;
+            tx.onerror=()=>reject(tx.error||Error('Gemeinsame Backup-Wiederherstellung fehlgeschlagen.'));
+            tx.onabort=()=>reject(tx.error||Error('Backup-Wiederherstellung abgebrochen, bestehende Daten erhalten.'));
+           });
+          }
+          /* VK196 END */
+          '''
+          app=once(app,'async function storeWeightJournal(rows){',RESTORE_HELPER+'\nasync function storeWeightJournal(rows){\n if(weightJournalReadOnly)throw Error(\'Gewichtstagebuch ist nicht lesbar: Schreiben zum Schutz bestehender Messwerte gesperrt. Nicht löschen, zuerst Daten sichern bzw. Speicherproblem prüfen.\');')
+          app=once(app,'syncProfileWeight();return true;\n}\n/* VK194 JOURNAL END */','syncProfileWeight();weightJournalReadOnly=false;return true;\n}\n/* VK194 JOURNAL END */')
+          
+          old_recovery=''' const pos=data.weights.findIndex(w=>w.id===e.id);
+           if(pos<0){
+            const savedWeights=data.weights.map(w=>({...w})),savedWeight=data.profile.weight;
+            data.weights.push(e);syncProfileWeight();
+            try{await storeWeightJournal(data.weights)}catch(err){data.weights=savedWeights;data.profile.weight=savedWeight;throw err}
+           }
+           try{await clearWeightDraft()}catch{}
+           return pos<0;'''
+          new_recovery=''' const pos=data.weights.findIndex(w=>w.id===e.id);
+           const changed=pos<0||['date','time','kg','mealTiming','note'].some(field=>data.weights[pos][field]!==e[field]);
+           if(changed){
+            const savedWeights=data.weights.map(w=>({...w})),savedWeight=data.profile.weight;
+            if(pos<0)data.weights.push(e);else data.weights[pos]=e;
+            syncProfileWeight();
+            try{await storeWeightJournal(data.weights)}catch(err){data.weights=savedWeights;data.profile.weight=savedWeight;throw err}
+           }
+           try{await clearWeightDraft()}catch{}
+           return changed;'''
+          app=once(app,old_recovery,new_recovery)
+          
+          old_auth="migrateData();try{await loadWeightJournal()}catch(err){toast('Separates Gewichtstagebuch kann derzeit nicht geöffnet werden. Bestehende Daten bleiben unverändert.')}let weightRecovered=false;try{weightRecovered=await recoverWeightDraft()}catch(err){toast('Gewichtszwischensicherung konnte nicht wiederhergestellt werden. Bitte Speicherplatz prüfen.')}common();if(weightRecovered)toast('Unterbrochene Gewichtsmessung wiederhergestellt.');return}"
+          new_auth="migrateData();weightJournalReadOnly=false;try{await loadWeightJournal()}catch(err){weightJournalReadOnly=true;toast('ACHTUNG: Gewichtstagebuch unlesbar. Zum Datenschutz ist Speichern von Gewichten vorläufig gesperrt; keine Einträge wurden gelöscht.')}let weightRecovered=false;if(!weightJournalReadOnly){try{weightRecovered=await recoverWeightDraft()}catch(err){toast('Gewichtszwischensicherung konnte nicht wiederhergestellt werden. Bitte Speicherplatz prüfen.')}}common();if(weightRecovered)toast('Unterbrochene Gewichtsmessung wiederhergestellt.');return}"
+          app=once(app,old_auth,new_auth)
+          
+          old_restore="const previousData=data;data=restored;migrateData();try{await save();await storeWeightJournal(data.weights)}catch(e){data=previousData;throw e}view='start';try{await clearWeightDraft()}catch{}common();toast('Backup wiederhergestellt.');return"
+          new_restore="const previousData=data;data=restored;migrateData();try{await saveQueue;await persistRestoredVault(data)}catch(e){data=previousData;throw e}weightJournalReadOnly=false;stagedBackupFile=null;view='start';common();toast('Backup und Gewichtstagebuch gemeinsam wiederhergestellt.');return"
+          app=once(app,old_restore,new_restore)
+          
+          app=once(app,"if(!form||form.getAttribute('id')!=='weight-form')throw Error('Gewichtsformular nicht gefunden.');", "if(!form||form.getAttribute('id')!=='weight-form')throw Error('Gewichtsformular nicht gefunden.');\n if(weightJournalReadOnly)throw Error('Gewichtstagebuch ist nicht lesbar. Weitere Eingaben wurden zum Schutz vorhandener Daten gesperrt.');")
+          
+          # Prevent silent false belief that an incomplete weight journal was fully backed up.
+          app=once(app,"if(action==='backup'){await save();await saveQueue;", "if(action==='backup'){if(weightJournalReadOnly&&!confirm('WARNUNG: Das separate Gewichtstagebuch konnte nicht gelesen werden. Diese Sicherung könnte ältere Gewichtswerte NICHT enthalten. Trotzdem eine Sicherung der übrigen Gesundheitsdaten erstellen?'))return;await save();await saveQueue;")
+          
+          # The German iPhone decimal keyboard can produce comma for goal weights.
+          app=once(app,'name="goalStartWeightKg" type="number" step="0.1" min="20" max="400"', 'name="goalStartWeightKg" type="text" inputmode="decimal" autocomplete="off"')
+          app=once(app,'name="goalWeightKg" type="number" step="0.1" min="20" max="400"', 'name="goalWeightKg" type="text" inputmode="decimal" autocomplete="off"')
+          
+          # Display permanent warning (as long as the current session is read-only).
+          old=r"return (interrupted?'<div class=\"notice warn\" role=\"status\">Ein früherer Speichervorgang wurde möglicherweise unterbrochen. Prüfe zuerst die Eintragsliste, bevor du erneut speicherst.</div>':'')+pageWeightOld()+vkWeightGoalPanel()"
+          new=r"return (weightJournalReadOnly?'<div class=\"notice danger\" role=\"alert\">Gewichtstagebuch konnte nicht geladen werden. Neue Gewichte sind zum Schutz vorhandener Einträge gesperrt. Bitte nichts löschen; eine Datensicherung der übrigen Gesundheitsdaten ist mit ausdrücklicher Warnung möglich.</div>':'')+(interrupted?'<div class=\"notice warn\" role=\"status\">Ein früherer Speichervorgang wurde möglicherweise unterbrochen. Prüfe zuerst die Eintragsliste, bevor du erneut speicherst.</div>':'')+pageWeightOld()+vkWeightGoalPanel()"
+          app=once(app,old,new)
+          
+          sw=once(sw,'/* VitalKompass 1.9.5:', '/* VitalKompass 1.9.6:')
+          sw=once(sw,"const CACHE='vital-kompass-1.9.5-form-id-fix';", "const CACHE='vital-kompass-1.9.6-data-integrity';")
+          version={'version':'1.9.6','released':'2026-10-20','notes':'Datenintegrität: atomare Backup-Wiederherstellung von Tresor und Gewichtstagebuch; geschützter Nur-Lesen-Modus bei beschädigtem Gewichtsjournal; Wiederherstellung bearbeiteter Gewichtseinträge; iPhone-Dezimalkomma bei Gewichtszielen. Passwort nur beim App-Start oder manuellem Sperren. Keine Gesundheitsdaten auf GitHub.'}
+          
+          Path('app.js').write_text(app,encoding='utf-8')
+          Path('sw.js').write_text(sw,encoding='utf-8')
+          Path('version.json').write_text(json.dumps(version,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          print('VitalKompass 1.9.6: Drei Programmdateien gezielt gepatcht.')
+          PY
+          python3 /tmp/vk196_patch.py
+      - name: Syntax und Sicherheits-Anker pruefen
+        if: steps.state.outputs.installed == 'false'
+        shell: bash
+        run: |
+          node --check app.js
+          node --check sw.js
+          python3 -m json.tool version.json >/dev/null
+          cat > /tmp/vk196_test.js <<'JS'
+          'use strict';
+          const assert=require('node:assert/strict');
+          const fs=require('node:fs');
+          const vm=require('node:vm');
+          const app=fs.readFileSync('app.js','utf8');
+          const sw=fs.readFileSync('sw.js','utf8');
+          const version=JSON.parse(fs.readFileSync('version.json','utf8'));
+          function between(start,end){const a=app.indexOf(start),b=app.indexOf(end,a+start.length);if(a<0||b<0)throw Error(`Marker fehlt: ${start} / ${end}`);return app.slice(a,b)}
+          assert.equal(version.version,'1.9.6');
+          assert(app.includes("const VERSION='1.9.6'"));
+          assert(app.includes('let weightJournalReadOnly=false'));
+          assert(app.includes("if(weightJournalReadOnly)throw Error('Gewichtstagebuch ist nicht lesbar"));
+          assert(app.includes('weightJournalReadOnly=true;toast('));
+          assert(app.includes("const changed=pos<0||['date','time','kg','mealTiming','note'].some"));
+          assert(app.includes("if(action==='backup'){if(weightJournalReadOnly&&!confirm("));
+          assert(app.includes('await persistRestoredVault(data)'));
+          assert(app.includes('name="goalWeightKg" type="text" inputmode="decimal"'));
+          assert(app.includes('name="goalStartWeightKg" type="text" inputmode="decimal"'));
+          assert(!app.includes('autoLock')&&!app.includes('automaticLock'));
+          assert(app.includes("form.getAttribute('id')"));
+          assert(!app.includes('form.id'));
+          assert(sw.includes('vital-kompass-1.9.6-data-integrity'));
+          assert(!sw.includes('then(()=>self.skipWaiting())'));
+          
+          async function testAtomic(success){
+           const existing=new Map([['vault',{salt:'secure-salt',iv:'old',cipher:'old'}],['weight-draft-v1',{iv:'draft'}],['weight-journal-v1',{iv:'previous',cipher:'previous'}]]);
+           let txCount=0, writes=[];
+           const ctx={
+            key:{},STORE:'safe',KEY:'vault',WEIGHT_JOURNAL_KEY:'weight-journal-v1',WEIGHT_DRAFT_KEY:'weight-draft-v1',Date,
+            getRec:async()=>existing.get('vault'),
+            pack:async x=>({iv:'new',cipher:JSON.stringify(x)}),
+            db:{transaction:()=>{txCount++;const ops=[];let tx={error:null,oncomplete:null,onabort:null,onerror:null,objectStore(){return {put(v,k){ops.push(['put',k,v])},delete(k){ops.push(['delete',k])}}}};
+             queueMicrotask(()=>{if(success){for(const [op,k,v] of ops){if(op==='put')existing.set(k,v);else existing.delete(k)}tx.oncomplete?.()}else{tx.error=Error('simulierter Schreibfehler');tx.onabort?.()}});
+             return tx;}}
+           };
+           const script=between('/* VK196 BEGIN:', '/* VK196 END */')+'\n';
+           vm.runInNewContext(script,ctx);
+           const restored={profile:{weight:'130.5'},weights:[{id:'test-1',date:'2026-10-20',time:'08:00',kg:130.5,mealTiming:'before_breakfast',note:''}]};
+           let error=null;try{await ctx.persistRestoredVault(restored)}catch(e){error=e}
+           assert.equal(txCount,1,'Nur eine Transaktion für beide Speicherbereiche');
+           if(success){assert.equal(error,null);assert.equal(existing.get('vault').salt,'secure-salt');assert.deepEqual(JSON.parse(existing.get('weight-journal-v1').cipher).rows,restored.weights);assert.equal(existing.has('weight-draft-v1'),false)}
+           else {assert(error);assert.equal(existing.get('vault').cipher,'old');assert.equal(existing.get('weight-journal-v1').cipher,'previous');assert.equal(existing.has('weight-draft-v1'),true)}
+          }
+          async function testDraftRecovery({originalKg,nextKg,shouldReject=false}){
+           const entry={id:'e1',date:'2026-10-20',time:'08:00',kg:nextKg,mealTiming:'before_breakfast',note:'updated'};
+           const old={...entry,kg:originalKg,note:'original'};
+           let persisted=0,cleared=0;
+           const data={weights:[old],profile:{weight:String(originalKg)}};
+           const ctx={
+            readWeightDraft:async()=>({iv:'mock'}),unpack:async()=>({format:'vk-weight-draft-v1',entry}),key:{},
+            dateValid:x=>/^\d{4}-\d\d-\d\d$/.test(x),timeValid:x=>/^\d\d:\d\d$/.test(x),
+            bpMealLabels:{before_breakfast:'Vor Frühstück'},data,toast:()=>{},
+            syncProfileWeight:()=>{data.profile.weight=String(data.weights.at(-1).kg)},
+            storeWeightJournal:async rows=>{persisted++;if(shouldReject)throw Error('QuotaExceeded');assert.equal(rows[0].kg,nextKg)},
+            clearWeightDraft:async()=>{cleared++}
+           };
+           vm.runInNewContext(between('async function recoverWeightDraft(){','\nconst b64='),ctx);
+           if(shouldReject){await assert.rejects(ctx.recoverWeightDraft());assert.equal(data.weights[0].kg,originalKg);assert.equal(cleared,0)}
+           else {assert.equal(await ctx.recoverWeightDraft(),true);assert.equal(data.weights[0].kg,nextKg);assert.equal(persisted,1);assert.equal(cleared,1)}
+          }
+          (async()=>{
+           await testAtomic(true);await testAtomic(false);
+           await testDraftRecovery({originalKg:130,nextKg:129.5});
+           await testDraftRecovery({originalKg:130,nextKg:129.5,shouldReject:true});
+           console.log('OK: Version, Code-Anker, atomare 2-Speicher-Wiederherstellung/Abort, korrigierte Gewichtsbearbeitung, Rollback, keine automatische Sperre.');
+          })().catch(e=>{console.error(e);process.exitCode=1});
+          JS
+          node /tmp/vk196_test.js
+      - name: Getestetes Update veroeffentlichen
+        if: steps.state.outputs.installed == 'false'
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.js sw.js version.json
+          if git diff --cached --quiet; then
+            echo 'Keine Aenderungen erforderlich.'
+          else
+            git commit -m 'VitalKompass 1.9.6: Speicherintegritaet, Backup und iPhone-Zahleneingabe'
+            git push origin HEAD:main
+          fi
