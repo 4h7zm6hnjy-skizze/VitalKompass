@@ -1,5 +1,5 @@
 {
-  "version": "1.9.4",
+  "version": "1.9.5",
   "released": "2026-10-20",
-  "notes": "Gewicht über echten Button-Klick ohne Formular-Neustart speichern; separater lokal verschlüsselter Gewichtsspeicher statt kompletter Neuverschlüsselung. Passwort beim App-Start bzw. manueller Sperre. Import und Backup kompatibel."
+  "notes": "Korrektur der HTML-Formularerkennung auf iPhone/Safari: ein verstecktes Feld name=id ueberschrieb form.id. Alle Formulare lesen die Kennung nun ueber getAttribute aus. Gewicht wird per normalem Button und getrennt verschluesselt gespeichert. Passwort nur beim Start oder manuellem Sperren; kein automatisches Sperren."
 }
