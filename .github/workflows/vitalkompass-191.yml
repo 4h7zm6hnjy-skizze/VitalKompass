@@ -1,0 +1,91 @@
+name: VitalKompass 1.9.1 Gewicht-Speicherfix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/vitalkompass-191.yml'
+      - 'fix_weight_191.py'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vitalkompass-191-fix
+  cancel-in-progress: false
+
+jobs:
+  update-weight-form:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Repository laden
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: true
+
+      - name: Versionsstand pruefen
+        id: check
+        run: |
+          if python3 -c 'import json; raise SystemExit(0 if json.load(open("version.json"))["version"] == "1.9.1" else 1)'; then
+            echo 'already_done=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'already_done=false' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Quellcode auf sichere Basis pruefen und Korrektur erzeugen
+        if: steps.check.outputs.already_done == 'false'
+        run: |
+          python3 -m py_compile fix_weight_191.py
+          python3 fix_weight_191.py
+
+      - name: Programmsyntax und Regressionen pruefen
+        if: steps.check.outputs.already_done == 'false'
+        run: |
+          node --check GitHub_Upload_1.9.1/app.js
+          node --check GitHub_Upload_1.9.1/sw.js
+          python3 -m json.tool GitHub_Upload_1.9.1/version.json > /dev/null
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          p = Path('GitHub_Upload_1.9.1')
+          s = (p / 'app.js').read_text(encoding='utf-8')
+          version = json.loads((p / 'version.json').read_text(encoding='utf-8'))
+          assert version['version'] == '1.9.1'
+          assert '<form id="weight-form" novalidate>' in s
+          assert 'name="kg" type="text" inputmode="decimal"' in s
+          assert "if(weightSaveInProgress)return;" in s
+          assert 'previousProfileWeight' in s
+          assert "weightSaveInProgress=false" in s
+          assert "id=\"weight-save-feedback\"" in s
+          assert "DB='vitalkompass-secure-v1'" in s
+          assert "function pageAsthma" in s
+          assert "function pageWeight" in s
+          assert "function pageDoctorReport" in s
+          assert "autoLock" not in s and "automaticLock" not in s
+          print('Sicherheits-, Syntax- und Funktionsanker: OK')
+          PY
+
+      - name: Gewichtsspeichern unter Testbedingungen testen
+        if: steps.check.outputs.already_done == 'false'
+        run: |
+          python3 test_weight_191.py GitHub_Upload_1.9.1/app.js
+
+      - name: Getestete App-Dateien installieren
+        if: steps.check.outputs.already_done == 'false'
+        run: |
+          cp GitHub_Upload_1.9.1/app.js app.js
+          cp GitHub_Upload_1.9.1/style.css style.css
+          cp GitHub_Upload_1.9.1/sw.js sw.js
+          cp GitHub_Upload_1.9.1/version.json version.json
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.js style.css sw.js version.json
+          if git diff --cached --quiet; then
+            echo 'Keine weiteren Aenderungen.'
+          else
+            git commit -m 'VitalKompass 1.9.1: Gewicht auf iPhone speichern'
+            git push origin HEAD:main
+          fi
