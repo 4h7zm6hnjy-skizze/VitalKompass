@@ -1,5 +1,5 @@
 {
-  "version": "1.9.5",
+  "version": "1.9.6",
   "released": "2026-10-20",
-  "notes": "Korrektur der HTML-Formularerkennung auf iPhone/Safari: ein verstecktes Feld name=id ueberschrieb form.id. Alle Formulare lesen die Kennung nun ueber getAttribute aus. Gewicht wird per normalem Button und getrennt verschluesselt gespeichert. Passwort nur beim Start oder manuellem Sperren; kein automatisches Sperren."
+  "notes": "Datenintegrität: atomare Backup-Wiederherstellung von Tresor und Gewichtstagebuch; geschützter Nur-Lesen-Modus bei beschädigtem Gewichtsjournal; Wiederherstellung bearbeiteter Gewichtseinträge; iPhone-Dezimalkomma bei Gewichtszielen. Passwort nur beim App-Start oder manuellem Sperren. Keine Gesundheitsdaten auf GitHub."
 }
