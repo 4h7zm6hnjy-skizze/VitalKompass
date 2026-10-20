@@ -1,0 +1,170 @@
+name: VitalKompass 1.9.8 - feste iPhone-Darstellung
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/vitalkompass-198.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vital-198-fixed-viewport
+  cancel-in-progress: false
+
+jobs:
+  fixed-viewport-update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: VitalKompass aus GitHub laden
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: true
+      - name: Installierten Stand pruefen
+        id: state
+        shell: bash
+        run: |
+          if python3 -c 'import json; raise SystemExit(0 if json.load(open("version.json",encoding="utf-8"))["version"] == "1.9.8" else 1)'; then
+            echo 'installed=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'installed=false' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Feste iPhone-Darstellung einbauen
+        if: steps.state.outputs.installed == 'false'
+        shell: bash
+        run: |
+          cat > /tmp/vk198_patch.py <<'PY'
+          from pathlib import Path
+          import hashlib, json
+
+          BASE_SHA = {
+              'app.js': 'f5afac256377119758765c5bcfe2b458d057da97',
+              'index.html': 'b1535b3ac3b625e2f42d0f87f0c3c0b753fa5efe',
+              'sw.js': 'a3b9f908c9bfb016dfcb8500e4c0e0b0a61d1166',
+              'version.json': '26809b46189ca9519801ebfc2ebfb6fef8a390d2',
+          }
+
+          def verified(path):
+              raw=Path(path).read_bytes()
+              actual=hashlib.sha1(b'blob '+str(len(raw)).encode('ascii')+b'\0'+raw).hexdigest()
+              if actual != BASE_SHA[path]:
+                  raise RuntimeError(f'ABBRUCH: {path} wurde seit der Pruefung geaendert. Erwartet {BASE_SHA[path]}, erhalten {actual}. Keine fremden Aenderungen ueberschreiben.')
+              return raw.decode('utf-8')
+
+          def replace_one(src,old,new):
+              n=src.count(old)
+              if n != 1:
+                  raise RuntimeError(f'ABBRUCH: Codeanker {old[:100]!r} ist {n} statt einmal vorhanden.')
+              return src.replace(old,new,1)
+
+          app=verified('app.js')
+          html=verified('index.html')
+          sw=verified('sw.js')
+          version=json.loads(verified('version.json'))
+          if version['version'] != '1.9.7':
+              raise RuntimeError('ABBRUCH: Aktualisierung nur von 1.9.7')
+
+          app=replace_one(app,"const VERSION='1.9.7'","const VERSION='1.9.8'")
+
+          fixed_zoom = r"""/* VK198 FIXED_VIEW_BEGIN: iPhone-Ansicht ohne Pinch-Zoom, normale Einzelberuehrung bleibt. */
+          if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+            for (const type of ['gesturestart', 'gesturechange']) {
+              document.addEventListener(type, ev => ev.preventDefault(), {passive:false});
+            }
+            for (const type of ['touchstart', 'touchmove']) {
+              document.addEventListener(type, ev => {
+                if (ev.touches && ev.touches.length > 1) ev.preventDefault();
+              }, {passive:false});
+            }
+          }
+          document.addEventListener('dblclick', ev => {
+            if (!ev.target?.closest?.('input,textarea,select,[contenteditable="true"]')) ev.preventDefault();
+          }, {passive:false});
+          /* VK198 FIXED_VIEW_END */
+          """
+          app=replace_one(app,"window.addEventListener('pagehide',()=>{ /* Daten sind nach jeder Eingabe verschlüsselt gespeichert. */ });",fixed_zoom+"window.addEventListener('pagehide',()=>{ /* Daten sind nach jeder Eingabe verschlüsselt gespeichert. */ });")
+          html=replace_one(html,'<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">','<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">')
+          sw=replace_one(sw,'/* VitalKompass 1.9.7: network-first code updates, offline fallback. */','/* VitalKompass 1.9.8: fixed iPhone viewport; network-first code updates and offline fallback. */')
+          sw=replace_one(sw,"const CACHE='vital-kompass-1.9.7-audit-fixes';","const CACHE='vital-kompass-1.9.8-fixed-view';")
+          version['version']='1.9.8'
+          version['released']='2026-10-20'
+          version['notes']='Feste iPhone-Darstellung: Zoomen per Zwei-Finger-Geste und Doppeltippen unterbunden, kein automatischer Formularzoom; normales vertikales Scrollen bleibt. Keine Aenderungen an Gesundheitsdaten, Verschluesselung oder Passwortsperre.'
+
+          Path('app.js').write_text(app,encoding='utf-8')
+          Path('index.html').write_text(html,encoding='utf-8')
+          Path('sw.js').write_text(sw,encoding='utf-8')
+          Path('version.json').write_text(json.dumps(version,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          print('Codepatch VitalKompass 1.9.8 erstellt; alle vier Ausgangsdateien per Git-SHA-1 geprueft.')
+          PY
+          python3 /tmp/vk198_patch.py
+      - name: Syntax und Verhalten kontrollieren
+        shell: bash
+        run: |
+          node --check app.js
+          node --check sw.js
+          python3 -m json.tool version.json > /dev/null
+          cat > /tmp/vk198_test.js <<'JS'
+          const fs=require('fs');
+          const vm=require('vm');
+          const assert=require('node:assert/strict');
+          const html=fs.readFileSync('index.html','utf8');
+          const app=fs.readFileSync('app.js','utf8');
+          const sw=fs.readFileSync('sw.js','utf8');
+          const css=fs.readFileSync('style.css','utf8');
+          const ver=JSON.parse(fs.readFileSync('version.json','utf8'));
+
+          assert.equal(ver.version,'1.9.8');
+          assert.match(app,/const VERSION='1\.9\.8'/);
+          assert.match(sw,/vital-kompass-1\.9\.8-fixed-view/);
+          assert.match(html,/name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"/);
+          assert.match(css,/touch-action:pan-y/);
+          assert.match(css,/input,select,textarea,button\{min-width:0;font-size:16px\}/);
+          // Avoid removing the app's security, offline and health-data code in a layout-only update.
+          for (const token of ['WEIGHT_JOURNAL_KEY','AES-GCM','PBKDF2','saveWeightDedicated','persistRestoredVault','root.addEventListener(\'submit\',handleSubmit)']) {
+            assert.ok(app.includes(token), `Fehlende Sicherheits-/Datenfunktion: ${token}`);
+          }
+          assert.match(sw,/cache:'no-store'/);
+          const part=app.match(/\/\* VK198 FIXED_VIEW_BEGIN[\s\S]*?\/\* VK198 FIXED_VIEW_END \*\//);
+          assert.ok(part,'Zoomsperre nicht gefunden');
+          let listeners={};
+          const document={addEventListener(t,cb,options){listeners[t]={cb,options}}};
+          vm.runInNewContext(part[0],{
+            document,
+            window:{ontouchstart:null},
+            navigator:{maxTouchPoints:5},
+          },{timeout:1200});
+          for (const type of ['gesturestart','gesturechange','touchstart','touchmove','dblclick']) {
+            assert.ok(listeners[type],`Ereignislistener fehlt: ${type}`);
+            assert.equal(listeners[type].options.passive,false,`Gestenlistener muss nicht-passiv sein: ${type}`);
+          }
+          function evt(touches,editable=false){let prevented=0;return {touches, target:{closest(){return editable?{}:null}},preventDefault(){prevented++},get prevented(){return prevented}}}
+          for (const t of ['touchstart','touchmove']) {
+            let single=evt([{}]); listeners[t].cb(single);assert.equal(single.prevented,0,`${t}: Einzelberuehrung scrollen lassen`);
+            let multiple=evt([{},{}]);listeners[t].cb(multiple);assert.equal(multiple.prevented,1,`${t}: Pinch verhindern`);
+          }
+          for (const t of ['gesturestart','gesturechange']) {
+            let e=evt([]);listeners[t].cb(e);assert.equal(e.prevented,1);
+          }
+          let doubleOutside=evt([]);listeners.dblclick.cb(doubleOutside);assert.equal(doubleOutside.prevented,1);
+          let doubleInput=evt([],true);listeners.dblclick.cb(doubleInput);assert.equal(doubleInput.prevented,0);
+          assert.equal((app.match(/VK198 FIXED_VIEW_BEGIN/g)||[]).length,1,'Patch darf nur einmal vorkommen');
+          console.log('OK: fester Viewport, pinch/double-tap blockiert, Einzelberuehrung erlaubt, iPhone-Eingaben ≥16px, Daten/Offline-Funktionen erhalten.');
+          JS
+          node /tmp/vk198_test.js
+      - name: Gepruefte Version installieren
+        if: steps.state.outputs.installed == 'false'
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.js index.html sw.js version.json
+          if git diff --cached --quiet; then
+            echo 'Keine Aenderung erforderlich.'
+          else
+            git commit -m 'VitalKompass 1.9.8: feste iPhone-Ansicht ohne Zoom'
+            git push origin HEAD:main
+          fi

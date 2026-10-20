@@ -1,0 +1,22 @@
+VitalKompass 1.9.8 – Feste iPhone-Darstellung
+
+Dieses Update deaktiviert die Zoomgesten der Webapp. Normales Scrollen,
+Formulare, Datenspeicherung, Passwort und Offline-Modus bleiben unverändert.
+
+WICHTIG: Nur die Datei vitalkompass-198.yml auf GitHub hochladen.
+Die ZIP-Datei selbst bitte NICHT hochladen.
+
+1. Diese ZIP-Datei in der iPhone-App "Dateien" öffnen/entpacken.
+2. Repo öffnen: https://github.com/4h7zm6hnjy-skizze/VitalKompass
+3. Die Datei vitalkompass-198.yml in .github/workflows/ hochladen.
+4. Der korrekte vollständige Pfad lautet:
+   .github/workflows/vitalkompass-198.yml
+5. Commit changes bestätigen. GitHub führt die Tests aus und installiert das Update.
+
+Falls GitHub im Hauptverzeichnis hochlädt, den Dateinamen im GitHub-Dateieditor
+von vitalkompass-198.yml auf .github/workflows/vitalkompass-198.yml ändern
+und dann Commit changes drücken.
+
+Es werden KEINE privaten Gesundheitsdaten in GitHub hochgeladen.
+Das System darf den Zoom aus Gründen der Bedienungshilfen unter Umständen
+trotzdem zulassen; das ist eine Einschränkung von iOS/WebKit.
