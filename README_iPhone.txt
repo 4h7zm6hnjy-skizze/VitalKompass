@@ -1,14 +1,14 @@
-VitalKompass 1.9.6 – iPhone-Installation
+VitalKompass 1.9.7 - Ein-Datei-Update fuer iPhone
 
-1. Diese ZIP-Datei in der iPhone-App „Dateien“ antippen und entpacken.
-2. GitHub öffnen: https://github.com/4h7zm6hnjy-skizze/VitalKompass/tree/main/.github/workflows
-3. Die Datei vitalkompass-196.yml aus dem entpackten Ordner über Add file > Upload files hochladen.
-4. WICHTIG: Datei muss unter .github/workflows/vitalkompass-196.yml liegen.
-5. Commit changes bestätigen.
-6. Danach den Workflow-Status unter GitHub > Actions prüfen.
+1. Die ZIP-Datei in der iPhone-App "Dateien" antippen und entpacken.
+2. Die enthaltene Datei "vitalkompass-197.yml" zu GitHub hochladen.
+3. WICHTIG: Der Dateipfad MUSS sein:
+   .github/workflows/vitalkompass-197.yml
+4. Wenn GitHub sie versehentlich im Hauptordner ablegt: Die Datei auf
+   GitHub ueber Edit file umbenennen / verschieben (Pfad oben aendern).
+5. In GitHub Actions kontrollieren, ob der Lauf GRUEN (Success) wird.
+6. Anschliessend auf der iPhone-Webapp nach Version 1.9.7 sehen.
 
-Falls GitHub die Datei im Hauptverzeichnis ablegt:
-https://github.com/4h7zm6hnjy-skizze/VitalKompass/edit/main/vitalkompass-196.yml
-Dort per Edit file den Dateinamen zum Pfad .github/workflows/vitalkompass-196.yml ändern und committen.
-
-Die App nicht löschen und keine Gesundheitsdaten zu GitHub hochladen.
+Keine Gesundheitsdaten in dieses ZIP. Keine Backups auf GitHub hochladen.
+Bei veraendertem Quellcode stoppt das Update vor Installation.
+Passwort weiterhin nur beim Start oder manueller Sperre; kein Auto-Lock.

@@ -1,0 +1,260 @@
+name: VitalKompass 1.9.7 - Gesamtpruefung und Reparaturen
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/vitalkompass-197.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vitalkompass-197-audit-fix
+  cancel-in-progress: false
+
+jobs:
+  full-audit-and-install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Code unveraendert aus GitHub laden
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: true
+      - name: Bereits installierte Version pruefen
+        id: state
+        shell: bash
+        run: |
+          if python3 -c 'import json; raise SystemExit(0 if json.load(open("version.json",encoding="utf8"))["version"] == "1.9.7" else 1)'; then
+            echo 'installed=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'installed=false' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Nur geprueften Ausgangsstand reparieren
+        if: steps.state.outputs.installed == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/vk197_patch.py <<'PY'
+          #!/usr/bin/env python3
+          """VitalKompass 1.9.7 focused audited fixes for 1.9.6 source.
+          Only source code, no health records. Fail closed on mismatched repository blobs.
+          """
+          from pathlib import Path
+          import hashlib, json
+          
+          FILES={
+           'app.js':'a6fe04297c97d63fcfd0f320c177e182fb753a96',
+           'sw.js':'6fe02ae09d53fc733dcadc9505deda81744876ce',
+           'index.html':'8b5fff59de5861d0e18314c8e04e7ae58982c75d',
+           'version.json':'fc429e5064037466b15861f1e0d40fe55d277669',
+          }
+          def read(path):
+              raw=Path(path).read_bytes()
+              sha=hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest()
+              if sha != FILES[path]: raise RuntimeError(f'App-Datei {path} weicht vom geprüften GitHub-Stand ab ({sha}). Keine Änderung.')
+              return raw.decode('utf8')
+          
+          def once(src,old,new):
+              count=src.count(old)
+              if count!=1: raise RuntimeError(f'Abbruch: Anker erwartet einmal, gefunden {count}: {old[:110]!r}')
+              return src.replace(old,new,1)
+          
+          app=read('app.js');sw=read('sw.js');index=read('index.html');version=json.loads(read('version.json'))
+          assert version['version']=='1.9.6'
+          app=once(app,'/* VitalKompass v1.9.6','/* VitalKompass v1.9.7')
+          app=once(app,"const VERSION='1.9.6'","const VERSION='1.9.7'")
+          
+          # Concurrency: protect the active vault key and the separate weight journal
+          # against lock/delete/import/backup while a weight write is pending.
+          waiting="if(weightSaveInProgress)throw Error('Die Gewichtsmessung wird noch gespeichert. Bitte warten und die Aktion anschließend wiederholen.');"
+          for anchor in [
+           "if(action==='lock'){",
+           "if(action==='remove'){",
+           "if(action==='backup'){",
+           "if(action==='wipe'){",
+           "if(form.getAttribute('id')==='restore-form'){",
+          ]:
+              app=once(app,anchor,anchor+waiting)
+          
+          # Roll back in-memory changes on a vault write failure. The storage snapshot
+          # itself is committed only by IndexedDB; failed calls must not leave phantom
+          # deleted/created measurements in memory which a later unrelated save persists.
+          app=once(app,
+           "data[bucket]=data[bucket].filter(x=>x.id!==idv);await save();renderMain();toast('Eintrag gelöscht.');return",
+           "const originalBucket=data[bucket];data[bucket]=originalBucket.filter(x=>x.id!==idv);try{await save()}catch(error){data[bucket]=originalBucket;throw error}renderMain();toast('Eintrag gelöscht.');return")
+          app=once(app,
+           "if(action==='toggle-reminder'){const t=data.reminders.find(x=>x.id===el.dataset.id);if(t){t.done=!t.done;await save();renderMain();}return}",
+           "if(action==='toggle-reminder'){const t=data.reminders.find(x=>x.id===el.dataset.id);if(t){const old=t.done;t.done=!t.done;try{await save()}catch(error){t.done=old;throw error}renderMain();}return}")
+          
+          # Make BP pulse optional ONLY when blank; invalid non-blank values must fail.
+          app=once(app,
+           "const sys=nval(f.get('sys')),dia=nval(f.get('dia')),pulse=nval(f.get('pulse'));",
+           "const sys=nval(f.get('sys')),dia=nval(f.get('dia')),pulseText=String(f.get('pulse')??'').trim(),pulse=pulseText===''?null:nval(pulseText);")
+          app=once(app,
+           "(Number.isFinite(pulse)&&(pulse<20||pulse>240))",
+           "(pulse!==null&&(!Number.isFinite(pulse)||pulse<20||pulse>240))")
+          app=once(app,
+           "pulse:Number.isFinite(pulse)?pulse:null",
+           "pulse")
+          
+          # Roll back new glucose/BP measurements if encryption/IndexedDB save fails.
+          for msg in ('Blutzucker gespeichert.','Blutdruck gespeichert.'):
+              app=once(app,
+                  f"data.measurements.push(item);await save();renderMain();toast('{msg}');",
+                  f"const previousMeasurements=data.measurements;data.measurements=[...previousMeasurements,item];try{{await save()}}catch(error){{data.measurements=previousMeasurements;throw error}}renderMain();toast('{msg}');")
+          
+          # Roll back medication/asthma edits on storage errors (not only new records).
+          app=once(app,
+           "if(at>=0)data.asthmaLogs[at]=entry;else data.asthmaLogs.push(entry);\n await save();renderMain();toast('Asthma-Eintrag gespeichert.');return;",
+           "const previousAsthma=data.asthmaLogs;data.asthmaLogs=previousAsthma.map(x=>({...x}));if(at>=0)data.asthmaLogs[at]=entry;else data.asthmaLogs.push(entry);\n try{await save()}catch(error){data.asthmaLogs=previousAsthma;throw error}renderMain();toast('Asthma-Eintrag gespeichert.');return;")
+          
+          # Further high-impact form writes: avoid phantom lab and medication values
+          # remaining in memory after a failed IndexedDB transaction.
+          app=once(app,
+           "for(const t of items)data.labs.push({id:id(),type:'lab',date,time:'',name:t.name,unit:t.unit,value:t.value,low:null,high:null,place,note,verified:true});await save();renderMain();",
+           "const oldLabs=data.labs;data.labs=[...oldLabs];for(const t of items)data.labs.push({id:id(),type:'lab',date,time:'',name:t.name,unit:t.unit,value:t.value,low:null,high:null,place,note,verified:true});try{await save()}catch(error){data.labs=oldLabs;throw error}renderMain();")
+          app=once(app,
+           "data.labs.push(...newitems);await save();labDraft={};",
+           "const oldLabs=data.labs;data.labs=[...oldLabs,...newitems];try{await save()}catch(error){data.labs=oldLabs;throw error}labDraft={};")
+          app=once(app,
+           "if(oldId){const i=data.meds.findIndex(x=>x.id===oldId);if(i>=0)data.meds[i]=med;else data.meds.push(med)}else data.meds.push(med);await save();renderMain();",
+           "const oldMeds=data.meds;data.meds=[...oldMeds];if(oldId){const i=data.meds.findIndex(x=>x.id===oldId);if(i>=0)data.meds[i]=med;else data.meds.push(med)}else data.meds.push(med);try{await save()}catch(error){data.meds=oldMeds;throw error}renderMain();")
+          
+          # Decimal comma reliability on iPhone: inputmode only suggests the keyboard;
+          # type=number can reject a localized comma before nval() ever sees it.
+          for field in ('v','l','u'):
+              app=once(app,
+                 'name="'+field+':${h(name)}" type="number" inputmode="decimal"',
+                 'name="'+field+':${h(name)}" type="text" inputmode="decimal" maxlength="32"')
+          
+          # Better physical/visual accessibility: allow user zoom without changing layout.
+          index=once(index,
+           'width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover',
+           'width=device-width,initial-scale=1,viewport-fit=cover')
+          
+          sw=once(sw,'/* VitalKompass 1.9.6:','/* VitalKompass 1.9.7:')
+          sw=once(sw,"const CACHE='vital-kompass-1.9.6-data-integrity';","const CACHE='vital-kompass-1.9.7-audit-fixes';")
+          version.update(version='1.9.7',released='2026-10-20',notes='Intensivprüfung: Schutz vor parallelen Gewichtsspeicher-/Sperr-/Backup-Aktionen; Rollback bei fehlgeschlagenen Blutdruck-, Blutzucker-, Asthma-, Lösch- und Erinnerungsvorgängen; optionale Pulsprüfung; iPhone-Dezimalkomma für Laborwerte und barrierefreies Zoomen. Lokale Verschlüsselung bleibt; keine automatische Sperre.')
+          for p,content in {'app.js':app,'sw.js':sw,'index.html':index,'version.json':json.dumps(version,ensure_ascii=False,indent=2)+'\n'}.items():
+              Path(p).write_text(content,encoding='utf8')
+          print('VitalKompass 1.9.7 Patch erfolgreich; app.js:',len(app),'Zeichen')
+          PY
+          python3 /tmp/vk197_patch.py
+      - name: Vollstaendige Syntax Struktur und Regressionstests
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check app.js
+          node --check sw.js
+          node --check vkpro.js
+          node --check pdf-export.js
+          python3 -m json.tool version.json >/dev/null
+          python3 -m json.tool manifest.webmanifest >/dev/null
+          cat > /tmp/vk197_test.js <<'JS'
+          'use strict';
+          const assert = require('node:assert/strict');
+          const fs = require('node:fs');
+          const vm = require('node:vm');
+          const app = fs.readFileSync('app.js','utf8');
+          const sw = fs.readFileSync('sw.js','utf8');
+          const html = fs.readFileSync('index.html','utf8');
+          const css = fs.readFileSync('style.css','utf8');
+          const version = JSON.parse(fs.readFileSync('version.json','utf8'));
+          const manifest = JSON.parse(fs.readFileSync('manifest.webmanifest','utf8'));
+          function must(source,term){assert(source.includes(term),`Fehlender Code-Anker: ${term}`)}
+          function between(source,start,end){let a=source.indexOf(start),b=source.indexOf(end,a+start.length);if(a<0||b<0)throw Error('Testmarker fehlt: '+start+' ... '+end);return source.slice(a,b)}
+          
+          // 1. Code completeness, deployment, offline and iPhone layout.
+          assert.equal(version.version,'1.9.7');
+          must(app,"const VERSION='1.9.7'");
+          must(sw,'vital-kompass-1.9.7-audit-fixes');
+          must(sw,"self.addEventListener('fetch'");
+          must(sw,"caches.match(req)");
+          must(sw,"e.data==='SKIP_WAITING'");
+          assert(!sw.includes('then(()=>self.skipWaiting())'),'Kein ungewollter automatischer Update-Neustart');
+          assert(!app.includes('autoLock')&&!app.includes('automaticLock'));
+          assert(!app.includes('form.id'),'Formular-ID-Namenskollision weiterhin behoben');
+          assert(/width=device-width,initial-scale=1,viewport-fit=cover/.test(html),'iPhone Viewport');
+          assert(!/user-scalable=no|maximum-scale=1/.test(html),'iPhone pinch-zoom barrierefrei');
+          assert(/@media\s*(?:screen and )?\(max-width:\s*700px\)/.test(css),'iPhone responsive layout');
+          for(const path of ['index.html','app.js','style.css','sw.js','vkpro.js','pdf-export.js','icon.svg','icon-192.png','icon-512.png','manifest.webmanifest','version.json']){
+           assert(fs.existsSync(path),`Offline-Asset fehlt: ${path}`);
+          }
+          assert.equal(manifest.display,'standalone');
+          assert(/default-src 'self'/.test(html)&&/connect-src 'self'/.test(html)&&/object-src 'none'/.test(html),'CSP/Datenschutz');
+          assert(!/\beval\s*\(|\bnew\s+Function\s*\(/.test(app),'Keine dynamische Codeausführung');
+          must(app,"{name:'PBKDF2'");
+          must(app,"{name:'AES-GCM'");
+          
+          // 2. All defined buttons and forms must have dispatch handlers.
+          const actions=[...app.matchAll(/data-action="([^"]+)"/g)].map(x=>x[1]);
+          const handlers=new Set([...app.matchAll(/if\(action==='([^']+)'\)/g)].map(x=>x[1]));
+          for(const a of new Set(actions)) assert(handlers.has(a),`Schaltfläche ohne Aktion: ${a}`);
+          const forms=[...app.matchAll(/<form id="([^"]+)"/g)].map(x=>x[1]);
+          const formHandlers=new Set([...app.matchAll(/form\.getAttribute\('id'\)==='([^']+)'/g)].map(x=>x[1]));
+          for(const f of new Set(forms)) assert(formHandlers.has(f),`Formular ohne Verarbeitung: ${f}`);
+          assert(new Set(forms).size>=25,'Hauptformulare werden erfasst');
+          assert(new Set(actions).size>=20,'Alle Aktionsbuttons werden erfasst');
+          
+          // 3. Medical data integrity, concurrency guards and intentional locking.
+          for(const action of ['lock','remove','backup','wipe'])must(app,"if(action==='"+action+"'){if(weightSaveInProgress)throw Error(");
+          must(app,"if(form.getAttribute('id')==='restore-form'){if(weightSaveInProgress)throw Error(");
+          must(app,"if(weightJournalReadOnly)throw Error('Gewichtstagebuch ist nicht lesbar");
+          must(app,"await persistRestoredVault(data)");
+          must(app,'const previousAsthma=data.asthmaLogs;data.asthmaLogs=previousAsthma.map');
+          must(app,'const oldLabs=data.labs;data.labs=[...oldLabs,...newitems];');
+          must(app,'const oldMeds=data.meds;data.meds=[...oldMeds];');
+          must(app,'const old=t.done;t.done=!t.done;try{await save()}catch(error){t.done=old;throw error}');
+          must(app,'const originalBucket=data[bucket];data[bucket]=originalBucket.filter');
+          must(app,'pulseText===\'\'?null:nval(pulseText)');
+          must(app,'(pulse!==null&&(!Number.isFinite(pulse)||pulse<20||pulse>240))');
+          for(const field of ['v','l','u'])must(app,'name="'+field+':${h(name)}" type="text" inputmode="decimal" maxlength="32"');
+          must(app,'weightChart(');must(app,'lineChart(');
+          must(app,'stroke-dasharray="7 5"');
+          must(app,'stroke-linecap="round"');
+          
+          // 4. Working rollback simulation for existing record deletion on failed writes.
+          const AsyncFunction=Object.getPrototypeOf(async function(){}).constructor;
+          const deletion=between(app,'const originalBucket=data[bucket];',"renderMain();toast('Eintrag gelöscht.');return");
+          const deleteTest=new AsyncFunction('data','bucket','idv','save',deletion);
+          async function runDeletion(fail){
+           const initial=[{id:'a',text:'behalten'},{id:'b',text:'löschen'}],data={symptoms:initial};
+           const save=async()=>{if(fail)throw Error('QuotaExceededError')};
+           if(fail)await assert.rejects(deleteTest(data,'symptoms','b',save),/QuotaExceededError/);
+           else await deleteTest(data,'symptoms','b',save);
+           assert.deepEqual(data.symptoms,fail?initial:[initial[0]],'Lösch-Rollback');
+          }
+          
+          // 5. Real comma conversion from running app's own conversion helper.
+          const nvalCode=app.match(/const nval=v=>\{[^\n]+/);
+          assert(nvalCode,'nval helper muss vorhanden sein');
+          const numeric=vm.runInNewContext(nvalCode[0]+'\n({comma:nval("130,5"),dot:nval("130.5"),bad:nval("garbage"),empty:nval("")})');
+          assert.equal(numeric.comma,130.5);assert.equal(numeric.dot,130.5);
+          assert(Number.isNaN(numeric.bad));assert(Number.isNaN(numeric.empty));
+          function validPulse(s){const pulseText=String(s??'').trim(),pulse=pulseText===''?null:Number(pulseText.replace(',','.'));return pulse===null||(Number.isFinite(pulse)&&pulse>=20&&pulse<=240)}
+          assert(validPulse(''));assert(validPulse('75'));assert(!validPulse('abc'));assert(!validPulse('300'));
+          
+          (async()=>{
+           await runDeletion(true);await runDeletion(false);
+           console.log(`OK: 1.9.7; ${new Set(actions).size} Aktionstypen; ${new Set(forms).size} Formulare; Offline/CSP/Passwortschutz; Gewichtsrennen; Schreibfehler-Rollbacks; Blutdruck-Puls; Dezimalkomma; Diagramm-Referenzen; iPhone-Layout.`);
+          })().catch(e=>{console.error(e);process.exitCode=1});
+          JS
+          node /tmp/vk197_test.js
+      - name: Nach bestandenen Tests installieren
+        if: steps.state.outputs.installed == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.js sw.js index.html version.json
+          if git diff --cached --quiet; then
+            echo 'Keine Aenderungen erforderlich.'
+          else
+            git commit -m 'VitalKompass 1.9.7: Gesamtpruefung, Speicherrollback und iPhone-Reparaturen'
+            git push origin HEAD:main
+          fi
