@@ -1,7 +1,7 @@
-/* VitalKompass v1.9.3 — lokal, keine externen Bibliotheken, keine Analytics */
+/* VitalKompass v1.9.4 — lokal, keine externen Bibliotheken, keine Analytics */
 'use strict';
 (() => {
-const VERSION='1.9.3', DB='vitalkompass-secure-v1', STORE='safe', KEY='vault';
+const VERSION='1.9.4', DB='vitalkompass-secure-v1', STORE='safe', KEY='vault';
 const root=document.getElementById('root');
 const $=(q,scope=document)=>scope.querySelector(q);
 const $$=(q,scope=document)=>Array.from(scope.querySelectorAll(q));
@@ -88,6 +88,27 @@ function putRec(v){return new Promise((resolve,reject)=>{const t=db.transaction(
 // Gewichts-Zwischensicherung: nur ein kleines, AES-GCM-verschlüsseltes Objekt.
 // Bei iOS-Neustarts kann die begonnene Messung nach erneuter Anmeldung gerettet werden.
 const WEIGHT_DRAFT_KEY='weight-draft-v1';
+/* VK194 JOURNAL BEGIN: Separat verschlüsselter Gewichtsspeicher. */
+const WEIGHT_JOURNAL_KEY='weight-journal-v1';
+function getWeightJournalRec(){return new Promise((resolve,reject)=>{const t=db.transaction(STORE,'readonly');const q=t.objectStore(STORE).get(WEIGHT_JOURNAL_KEY);q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error)})}
+async function storeWeightJournal(rows){
+ if(!key||!Array.isArray(rows)||rows.length>50000)throw Error('Gewichtsspeicher nicht verfügbar.');
+ const envelope=await pack({format:'vk-weight-journal-v1',rows},key);
+ await new Promise((resolve,reject)=>{const t=db.transaction(STORE,'readwrite');t.objectStore(STORE).put(envelope,WEIGHT_JOURNAL_KEY);t.oncomplete=resolve;t.onerror=()=>reject(t.error)});
+ const saved=await getWeightJournalRec();
+ if(!saved?.cipher||!saved?.iv)throw Error('Gewichtsspeicher konnte nicht bestätigt werden.');
+ const restored=await unpack(saved,key);
+ if(restored?.format!=='vk-weight-journal-v1'||!Array.isArray(restored.rows)||restored.rows.length!==rows.length||!restored.rows.every((r,i)=>r.id===rows[i].id&&r.kg===rows[i].kg&&r.date===rows[i].date&&r.time===rows[i].time))throw Error('Gewichtsspeicherprüfung fehlgeschlagen.');
+}
+async function loadWeightJournal(){
+ const saved=await getWeightJournalRec();if(!saved)return false;
+ const restored=await unpack(saved,key);
+ if(restored?.format!=='vk-weight-journal-v1'||!Array.isArray(restored.rows)||restored.rows.length>50000||!restored.rows.every(r=>r&&typeof r.id==='string'&&dateValid(r.date)&&timeValid(r.time)&&Number.isFinite(r.kg)&&r.kg>=20&&r.kg<=400&&Object.prototype.hasOwnProperty.call(bpMealLabels,r.mealTiming)&&r.mealTiming!=='unknown'&&(r.note===undefined||typeof r.note==='string')))throw Error('Gewichtsspeicher enthält ungültige Daten.');
+ data.weights=restored.rows;
+ syncProfileWeight();return true;
+}
+/* VK194 JOURNAL END */
+
 function readWeightDraft(){return new Promise((resolve,reject)=>{const t=db.transaction(STORE,'readonly');const q=t.objectStore(STORE).get(WEIGHT_DRAFT_KEY);q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error);})}
 function writeWeightDraft(entry){return pack({format:'vk-weight-draft-v1',entry},key).then(envelope=>new Promise((resolve,reject)=>{const t=db.transaction(STORE,'readwrite');t.objectStore(STORE).put(envelope,WEIGHT_DRAFT_KEY);t.oncomplete=resolve;t.onerror=()=>reject(t.error)}))}
 function clearWeightDraft(){return new Promise((resolve,reject)=>{const t=db.transaction(STORE,'readwrite');t.objectStore(STORE).delete(WEIGHT_DRAFT_KEY);t.oncomplete=resolve;t.onerror=()=>reject(t.error)})}
@@ -100,7 +121,7 @@ async function recoverWeightDraft(){
  if(pos<0){
   const savedWeights=data.weights.map(w=>({...w})),savedWeight=data.profile.weight;
   data.weights.push(e);syncProfileWeight();
-  try{await save()}catch(err){data.weights=savedWeights;data.profile.weight=savedWeight;throw err}
+  try{await storeWeightJournal(data.weights)}catch(err){data.weights=savedWeights;data.profile.weight=savedWeight;throw err}
  }
  try{await clearWeightDraft()}catch{}
  return pos<0;
@@ -356,7 +377,7 @@ function pageWeightOld(){
  const options=Object.entries(bpMealLabels).filter(([k])=>k!=='unknown');
  return tag('Körpergewicht','Tägliches Gewichtstagebuch mit sechs Messzeitpunkten und fünf Diagrammansichten.')+
  `<div class="main-grid"><div class="metric"><span>Letzte Gewichtsmessung</span><strong>${last?nf(last.kg,1)+' kg':'–'}</strong><small>${last?fmtDate(last.date)+' · '+h(last.time):'Noch keine Messung'}</small></div><div class="metric"><span>Einträge</span><strong>${entries.length}</strong><small>Insgesamt dokumentiert</small></div></div>`+
- panel('Körpergewicht eintragen',`<form id="weight-form" novalidate><input name="id" type="hidden"><div class="form-grid"><label class="field"><span>Datum</span><input name="date" type="date" value="${today()}" required></label><label class="field"><span>Uhrzeit</span><input name="time" type="time" value="${nowTime()}" required></label><label class="field"><span>Körpergewicht (kg)</span><input name="kg" type="text" inputmode="decimal" autocomplete="off" enterkeyhint="done" required placeholder="z. B. 130,5" aria-describedby="weight-input-help"></label><label class="field"><span>Wann gewogen?</span><select name="mealTiming" required>${options.map(([k,v])=>`<option value="${k}">${h(v)}</option>`).join('')}</select></label><label class="field"><span>Notiz (optional)</span><input name="note" maxlength="300" placeholder="z. B. nach dem Aufstehen"></label></div><p id="weight-input-help" class="section-note">Eingabe mit Komma oder Punkt möglich, z. B. 130,5 oder 130.5 kg.</p><div class="actions"><button class="primary" type="submit">Gewicht speichern</button></div><p id="weight-save-feedback" class="vk-save-feedback" role="status" aria-live="polite"></p></form><p class="section-note">Mehrere Messungen pro Tag sind möglich. Gespeicherte Werte kannst du unten bearbeiten und löschen.</p>`)+
+ panel('Körpergewicht eintragen',`<form id="weight-form" novalidate><input name="id" type="hidden"><div class="form-grid"><label class="field"><span>Datum</span><input name="date" type="date" value="${today()}" required></label><label class="field"><span>Uhrzeit</span><input name="time" type="time" value="${nowTime()}" required></label><label class="field"><span>Körpergewicht (kg)</span><input name="kg" type="text" inputmode="decimal" autocomplete="off" enterkeyhint="done" required placeholder="z. B. 130,5" aria-describedby="weight-input-help"></label><label class="field"><span>Wann gewogen?</span><select name="mealTiming" required>${options.map(([k,v])=>`<option value="${k}">${h(v)}</option>`).join('')}</select></label><label class="field"><span>Notiz (optional)</span><input name="note" maxlength="300" placeholder="z. B. nach dem Aufstehen"></label></div><p id="weight-input-help" class="section-note">Eingabe mit Komma oder Punkt möglich, z. B. 130,5 oder 130.5 kg.</p><div class="actions"><button class="primary" type="button" data-action="save-weight">Gewicht speichern</button></div><p id="weight-save-feedback" class="vk-save-feedback" role="status" aria-live="polite"></p></form><p class="section-note">Mehrere Messungen pro Tag sind möglich. Gespeicherte Werte kannst du unten bearbeiten und löschen.</p>`)+
  panel('Gewichtsdiagramm',chartPicker('weight')+`<label class="field weight-filter"><span>Messzeitpunkt im Diagramm</span><select id="weight-meal-filter"><option value="all" ${weightMealFilter==='all'?'selected':''}>Alle Messzeitpunkte</option>${options.map(([k,v])=>`<option value="${k}" ${weightMealFilter===k?'selected':''}>${h(v)}</option>`).join('')}</select></label>`+weightChart(chartPeriods.weight,null,720,weightMealFilter))+
  panel('Gewichtstagebuch · letzte 100 Einträge',weightTable());
 }
@@ -643,8 +664,37 @@ for(const x of incoming.labs||[]){if(!x||x.type!=='lab'||!dateValid(x.date)||typ
 await save();importCommitted=true;view=importedBp>0?'bp':count>0?'labs':'glucose';common();toast(`Import: ${importedBp} Blutdruckwerte, ${importedGlucose} Blutzuckerwerte, ${count} Laborwerte neu. Bitte anhand der Originalunterlagen prüfen.`);
 }catch(error){if(!importCommitted)data=beforeImport;throw error}
 }
+/* VK194 SAVE BEGIN: Kein HTML-Submit und keine Komplettverschlüsselung beim Wiegen. */
+async function saveWeightDedicated(form){
+ if(weightSaveInProgress)return;
+ if(!form||form.id!=='weight-form')throw Error('Gewichtsformular nicht gefunden.');
+ const f=new FormData(form),kg=nval(f.get('kg')),date=String(f.get('date')||''),time=String(f.get('time')||''),meal=String(f.get('mealTiming')||''),entryId=String(f.get('id')||'');
+ if(!Number.isFinite(kg)||kg<20||kg>400)throw Error('Bitte ein Gewicht zwischen 20 und 400 kg eingeben (z. B. 130,5).');
+ if(!dateValid(date)||date>today()||!timeValid(time))throw Error('Datum und Uhrzeit prüfen.');
+ if(meal==='unknown'||!Object.prototype.hasOwnProperty.call(bpMealLabels,meal))throw Error('Bitte einen Messzeitpunkt wählen.');
+ const entry={id:entryId||id(),date,time,kg:Math.round(kg*10)/10,mealTiming:meal,note:String(f.get('note')||'').slice(0,300)};
+ const at=data.weights.findIndex(x=>x.id===entryId);
+ if(entryId&&at<0)throw Error('Der ursprüngliche Gewichtseintrag wurde nicht gefunden.');
+ const next=data.weights.map(x=>({...x}));if(at>=0)next[at]=entry;else next.push(entry);
+ const feedback=$('#weight-save-feedback'),button=form.querySelector('[data-action="save-weight"]');
+ weightSaveInProgress=true;
+ if(feedback){feedback.textContent='Gewicht wird sicher gespeichert …';feedback.classList.remove('vk-save-error')}
+ if(button){button.disabled=true;button.textContent='Speichert …'}
+ try{
+  await writeWeightDraft(entry);
+  await storeWeightJournal(next);
+  data.weights=next;syncProfileWeight();
+  try{await clearWeightDraft()}catch{}
+  renderMain();toast('Gewicht verschlüsselt gespeichert: '+nf(entry.kg,1)+' kg.');
+ }finally{
+  weightSaveInProgress=false;
+  if(button?.isConnected){button.disabled=false;button.textContent='Gewicht speichern'}
+ }
+}
+/* VK194 SAVE END */
+
 async function handleSubmit(ev){const form=ev.target;if(!form.id||!form.id.endsWith('-form'))return;ev.preventDefault();const f=new FormData(form);try{
-if(form.id==='auth-form'){if(!canUseCrypto)throw Error('Keine sichere Verschlüsselung verfügbar.');const pass=f.get('password');const old=await getRec();if(!old){if(pass!==f.get('confirm'))throw Error('Passwörter stimmen nicht überein.');if(pass.length<10)throw Error('Passwort muss mindestens 10 Zeichen haben.');const salt=crypto.getRandomValues(new Uint8Array(16));key=await passKey(pass,salt);data=defaults();await putRec({salt:b64(salt),...await pack(data,key),modified:new Date().toISOString()})}else{key=await passKey(pass,unb64(old.salt));try{data=await unpack(old,key)}catch{key=null;throw Error('Passwort falsch oder gespeicherte Daten beschädigt.')}}migrateData();let weightRecovered=false;try{weightRecovered=await recoverWeightDraft()}catch(err){toast('Gewichtszwischensicherung konnte nicht wiederhergestellt werden. Bitte Speicherplatz prüfen.')}common();if(weightRecovered)toast('Unterbrochene Gewichtsmessung wiederhergestellt.');return}
+if(form.id==='auth-form'){if(!canUseCrypto)throw Error('Keine sichere Verschlüsselung verfügbar.');const pass=f.get('password');const old=await getRec();if(!old){if(pass!==f.get('confirm'))throw Error('Passwörter stimmen nicht überein.');if(pass.length<10)throw Error('Passwort muss mindestens 10 Zeichen haben.');const salt=crypto.getRandomValues(new Uint8Array(16));key=await passKey(pass,salt);data=defaults();await putRec({salt:b64(salt),...await pack(data,key),modified:new Date().toISOString()})}else{key=await passKey(pass,unb64(old.salt));try{data=await unpack(old,key)}catch{key=null;throw Error('Passwort falsch oder gespeicherte Daten beschädigt.')}}migrateData();try{await loadWeightJournal()}catch(err){toast('Separates Gewichtstagebuch kann derzeit nicht geöffnet werden. Bestehende Daten bleiben unverändert.')}let weightRecovered=false;try{weightRecovered=await recoverWeightDraft()}catch(err){toast('Gewichtszwischensicherung konnte nicht wiederhergestellt werden. Bitte Speicherplatz prüfen.')}common();if(weightRecovered)toast('Unterbrochene Gewichtsmessung wiederhergestellt.');return}
 if(!data)return;
 if(form.id==='weight-goal-form'){
  const goal=String(f.get('goalWeightKg')||'').trim(),start=String(f.get('goalStartWeightKg')||'').trim(),date=String(f.get('goalDate')||'');
@@ -726,31 +776,7 @@ if(form.id==='evidence-form'){
  const o={id:id(),date:String(f.get('date')||''),kind:String(f.get('kind')||''),notes:String(f.get('notes')||'').slice(0,500),filename,mime,base64};
  if(!dateValid(o.date)||!evidenceKinds.includes(o.kind))throw Error('Dokumentangaben prüfen.');data.evidence.push(o);await save();renderMain();toast('Nachweis verschlüsselt gespeichert.');return;
 }
-if(form.id==='weight-form'){
- if(weightSaveInProgress)return;
- const kg=nval(f.get('kg')),date=String(f.get('date')||''),time=String(f.get('time')||''),meal=String(f.get('mealTiming')||''),entryId=String(f.get('id')||'');
- if(!Number.isFinite(kg)||kg<20||kg>400)throw Error('Bitte das Gewicht als Zahl eingeben, z. B. 130,5 (erlaubt: 20 bis 400 kg).');
- if(!dateValid(date)||date>today()||!timeValid(time))throw Error('Datum oder Uhrzeit ungültig. Ein zukünftiges Datum ist nicht erlaubt.');
- if(meal==='unknown'||!Object.prototype.hasOwnProperty.call(bpMealLabels,meal))throw Error('Bitte den Messzeitpunkt auswählen.');
- const entry={id:entryId||id(),date,time,kg:Math.round(kg*10)/10,mealTiming:meal,note:String(f.get('note')||'').slice(0,300)};
- const at=data.weights.findIndex(x=>x.id===entryId);
- if(entryId&&at<0)throw Error('Dieser Gewichtseintrag wurde nicht gefunden.');
- const previousWeights=data.weights.map(x=>({...x})),previousProfileWeight=data.profile.weight;
- const weightFeedback=$('#weight-save-feedback'),saveButton=form.querySelector('button[type=\"submit\"]');
- weightSaveInProgress=true;
- try{sessionStorage.setItem('vk-weight-save-pending','1')}catch{}
- if(weightFeedback){weightFeedback.textContent='Gewicht wird verschlüsselt gespeichert …';weightFeedback.classList.remove('vk-save-error')}
- if(saveButton){saveButton.disabled=true;saveButton.textContent='Speichert …'}
- try{
-  await writeWeightDraft(entry); // Vor dem großen verschlüsselten Datensatz gesichert.
-  if(at>=0)data.weights[at]=entry;else data.weights.push(entry);
-  syncProfileWeight();
-  await save(); // putRec meldet Abschluss erst nach Commit der IndexedDB-Transaktion.
-  try{await clearWeightDraft()}catch{}
- }catch(error){data.weights=previousWeights;data.profile.weight=previousProfileWeight;throw error}
- finally{weightSaveInProgress=false;try{sessionStorage.removeItem('vk-weight-save-pending')}catch{};if(saveButton?.isConnected){saveButton.disabled=false;saveButton.textContent='Gewicht speichern'}}
- renderMain();toast('Gewicht dauerhaft gespeichert: '+nf(entry.kg,1)+' kg.');return;
-}
+if(form.id==='weight-form'){await saveWeightDedicated(form);return}
 if(form.id==='glucose-form'){const raw=nval(f.get('value')),mgdl=f.get('unit')==='mmol'?raw*18.0182:raw;if(!Number.isFinite(mgdl)||mgdl<10||mgdl>700)throw Error('Plausiblen Blutzuckerwert eingeben (10–700 mg/dl).');if(!dateValid(f.get('date'))||!timeValid(f.get('time')))throw Error('Datum und Uhrzeit prüfen.');const item={id:id(),type:'glucose',date:f.get('date'),time:f.get('time'),mgdl:Math.round(mgdl*10)/10,period:f.get('period'),note:f.get('note')||'',verified:true};data.measurements.push(item);await save();renderMain();toast('Blutzucker gespeichert.');const w=glucoseWarnings(item);if(w.length)alert('Blutzucker-Warnhinweis:\n'+w.join('\n'));return}
 if(form.id==='bp-form'){const sys=nval(f.get('sys')),dia=nval(f.get('dia')),pulse=nval(f.get('pulse'));if(!Number.isFinite(sys)||!Number.isFinite(dia)||sys<=dia||sys<40||sys>320||dia<20||dia>220||(Number.isFinite(pulse)&&(pulse<20||pulse>240)))throw Error('Bitte den systolischen, diastolischen Wert und Puls prüfen.');if(!dateValid(f.get('date'))||!timeValid(f.get('time')))throw Error('Datum und Uhrzeit prüfen.');const mealTiming=String(f.get('mealTiming')||'unknown');if(!Object.prototype.hasOwnProperty.call(bpMealLabels,mealTiming))throw Error('Ungültige Mahlzeitenauswahl.');const item={id:id(),type:'bp',date:f.get('date'),time:f.get('time'),sys,dia,pulse:Number.isFinite(pulse)?pulse:null,mealTiming,note:f.get('note')||'',verified:true};data.measurements.push(item);await save();renderMain();toast('Blutdruck gespeichert.');const w=bpWarnings(item);if(w.length)alert('Blutdruck-Warnhinweis:\n'+w.join('\n'));return}
 if(form.id==='psa-form'){const total=nval(f.get('total')),freeRaw=String(f.get('free')??'').trim(),free=freeRaw===''?NaN:nval(freeRaw),date=f.get('date');if(!dateValid(date))throw Error('Datum ungültig.');if(!Number.isFinite(total)||total<0||total>500)throw Error('Gesamt-PSA prüfen.');if(freeRaw!==''&&(!Number.isFinite(free)||free<0||free>total))throw Error('Freies PSA darf nicht größer als Gesamt-PSA sein.');const note=String(f.get('notes')||'').slice(0,300),place=String(f.get('place')||'').slice(0,120);const items=[{name:'PSA gesamt',unit:'ng/ml',value:total}];if(Number.isFinite(free)){items.push({name:'PSA frei',unit:'ng/ml',value:free});if(total>0)items.push({name:'PSA frei/gesamt',unit:'%',value:Math.round(free/total*10000)/100});}for(const t of items)data.labs.push({id:id(),type:'lab',date,time:'',name:t.name,unit:t.unit,value:t.value,low:null,high:null,place,note,verified:true});await save();renderMain();toast(`${items.length} PSA-Laborwerte gespeichert. Für die Bewertung den Urologen einbeziehen.`);return}
@@ -770,7 +796,7 @@ if(form.id==='gdb-form'){
 if(form.id==='profile-form'){const props=['name','birthday','bloodGroup','height','weight','notes'];for(const x of props)data.profile[x]=(f.get(x)||'').trim();for(const x of ['conditions','allergies','intolerances','foods','pollen','history'])data.profile[x]=(f.get(x)||'').split('\n').map(x=>x.trim()).filter(Boolean);data.profile.contact=(f.get('contacts')||'').split('\n').map(x=>{const [name,...tel]=x.split('|');return {name:(name||'').trim(),phone:tel.join('|').trim()}}).filter(x=>x.name);await save();renderMain();toast('Notfallpass gespeichert.');return}
 if(form.id==='threshold-form'){const changes={...data.settings};for(const k of Object.keys(changes)){if(!f.has(k))continue;const v=nval(f.get(k));if(Number.isFinite(v))changes[k]=v}if(changes.glucoseFastingLow>=changes.glucoseFastingHigh)throw Error('Nüchtern-Untergrenze darf nicht über der Obergrenze liegen.');if(changes.bpLowSys>=changes.bpHighSys||changes.bpHighSys>=changes.bpCriticalSys||changes.bpLowDia>=changes.bpHighDia||changes.bpHighDia>=changes.bpCriticalDia)throw Error('Blutdruck-Grenzen müssen aufsteigend sein.');if(changes.pulseCriticalLow>=changes.pulseLow||changes.pulseLow>=changes.pulseHigh||changes.pulseHigh>=changes.pulseCriticalHigh)throw Error('Puls-Grenzen müssen aufsteigend sein.');if(changes.glucoseCriticalHigh<=changes.glucoseAfterHigh||changes.glucoseCriticalHigh<=changes.glucoseFastingHigh)throw Error('Kritische Blutzucker-Obergrenze muss oberhalb der Zielwerte liegen.');if(changes.bpCriticalSys>180||changes.bpCriticalDia>110)throw Error('Die medizinische Sofortabklärungsschwelle 180/110 darf nicht heraufgesetzt werden.');data.settings=changes;await save();renderMain();toast('Warnschwellen gespeichert.');return}
 if(form.id==='benefits-form'){const result=letter(f);const out=$('#letter-result');out.innerHTML=`<label class="field"><span>Vorlage zum Kopieren</span><textarea id="letter-text" rows="14">${h(result)}</textarea></label><button data-action="copy-letter" class="secondary" type="button">Text kopieren</button>`;return}
-if(form.id==='restore-form'){if(!f.get('confirmReplace'))throw Error('Bitte zuerst die bewusste Datenüberschreibung bestätigen.');const file=f.get('file'),pass=f.get('password');if(!(file instanceof File)||!file.size)throw Error('Backup-Datei wählen.');if(file.size>32*1024*1024)throw Error('Backup zu groß.');const v=JSON.parse(await file.text());if(v.format!=='vitalkompass-backup-v1'||!v.salt||!v.iv||!v.cipher)throw Error('Unbekanntes Backup-Format.');const tempkey=await passKey(pass,unb64(v.salt));let restored;try{restored=await unpack(v,tempkey)}catch{throw Error('Backup-Passwort falsch oder Datei beschädigt.')}validateStored(restored);const priorName=String(data.profile.name||'').trim(),backupName=String(restored.profile.name||'').trim();if(priorName&&backupName&&priorName.toLocaleLowerCase('de-DE')!==backupName.toLocaleLowerCase('de-DE'))throw Error('Das Backup gehört zu einem anderen Patienten. Bitte zuerst die vorhandenen Daten separat sichern und einen neuen Speicher anlegen.');if(data.profile.birthday&&restored.profile.birthday&&data.profile.birthday!==restored.profile.birthday)throw Error('Geburtsdatum im Backup stimmt nicht mit dem vorhandenen Patienten überein.');if(!confirm(`ACHTUNG: Das Backup enthält ${restored.measurements.length} Blutdruck-/Blutzuckerwerte und ${(restored.weights||[]).length} Gewichtseinträge. Alle aktuellen Daten werden vollständig ERSETZT, nicht zusammengeführt. Fortfahren?`))return;const previousData=data;data=restored;migrateData();try{await save()}catch(e){data=previousData;throw e}view='start';try{await clearWeightDraft()}catch{}common();toast('Backup wiederhergestellt.');return}
+if(form.id==='restore-form'){if(!f.get('confirmReplace'))throw Error('Bitte zuerst die bewusste Datenüberschreibung bestätigen.');const file=f.get('file'),pass=f.get('password');if(!(file instanceof File)||!file.size)throw Error('Backup-Datei wählen.');if(file.size>32*1024*1024)throw Error('Backup zu groß.');const v=JSON.parse(await file.text());if(v.format!=='vitalkompass-backup-v1'||!v.salt||!v.iv||!v.cipher)throw Error('Unbekanntes Backup-Format.');const tempkey=await passKey(pass,unb64(v.salt));let restored;try{restored=await unpack(v,tempkey)}catch{throw Error('Backup-Passwort falsch oder Datei beschädigt.')}validateStored(restored);const priorName=String(data.profile.name||'').trim(),backupName=String(restored.profile.name||'').trim();if(priorName&&backupName&&priorName.toLocaleLowerCase('de-DE')!==backupName.toLocaleLowerCase('de-DE'))throw Error('Das Backup gehört zu einem anderen Patienten. Bitte zuerst die vorhandenen Daten separat sichern und einen neuen Speicher anlegen.');if(data.profile.birthday&&restored.profile.birthday&&data.profile.birthday!==restored.profile.birthday)throw Error('Geburtsdatum im Backup stimmt nicht mit dem vorhandenen Patienten überein.');if(!confirm(`ACHTUNG: Das Backup enthält ${restored.measurements.length} Blutdruck-/Blutzuckerwerte und ${(restored.weights||[]).length} Gewichtseinträge. Alle aktuellen Daten werden vollständig ERSETZT, nicht zusammengeführt. Fortfahren?`))return;const previousData=data;data=restored;migrateData();try{await save();await storeWeightJournal(data.weights)}catch(e){data=previousData;throw e}view='start';try{await clearWeightDraft()}catch{}common();toast('Backup wiederhergestellt.');return}
 if(form.id==='import-form'){const file=f.get('file');if(!(file instanceof File)||!file.size)throw Error('Datei auswählen.');if(file.size>1024*1024)throw Error('Importdatei zu groß.');const obj=JSON.parse(await file.text());await importPrivate(obj);return}
 }catch(err){const message=err.message||'Fehler beim Speichern';if(form.id==='weight-form'){const target=$('#weight-save-feedback');if(target){target.textContent=message;target.classList.add('vk-save-error');target.scrollIntoView({block:'nearest'});}}alert(message)}}
 function validateStored(x){
@@ -791,8 +817,9 @@ function validateStored(x){
 }
 async function checkUpdate(){const status=$('#update-status');if(!('serviceWorker' in navigator)){status.textContent='Service Worker in diesem Browser nicht verfügbar. Webseite ggf. neu laden.';return}try{const r=await fetch('./version.json?check='+Date.now(),{cache:'no-store'});if(!r.ok)throw Error('Versionsdatei nicht erreichbar');const v=await r.json();const reg=await navigator.serviceWorker.getRegistration();await reg?.update();const latest=v.version||'unbekannt';pendingUpdate=!!reg?.waiting;if(latest===VERSION&&!pendingUpdate){status.textContent=`Aktuell: ${VERSION}. Kein neuer veröffentlichter Stand vorhanden.`}else if(pendingUpdate){status.textContent=`Update ${latest} verfügbar. „Vorhandenes Update installieren“ wählen.`}else{status.textContent=`Serverversion ${latest}; installierte Version ${VERSION}. Nach vollständiger Veröffentlichung bitte neu laden.`;pendingUpdate=latest!==VERSION}}catch(e){status.textContent='Update-Prüfung derzeit nicht möglich (offline oder Server nicht erreichbar).'}}
 async function doAction(el){const action=el.dataset.action;try{
+if(action==='save-weight'){try{await saveWeightDedicated($('#weight-form'))}catch(error){const target=$('#weight-save-feedback');if(target){target.textContent=error.message||'Gewicht konnte nicht gespeichert werden.';target.classList.add('vk-save-error')}alert(error.message||'Gewicht konnte nicht gespeichert werden.')}return}
 if(action==='lock'){await saveQueue;discardTemporaryPDF();bridgePreview=null;stagedBackupFile=null;data=null;key=null;view='start';authPage(!!(await getRec()));document.body.classList.remove('senior-mode');return}
-if(action==='remove'){if(!confirm('Diesen Eintrag endgültig löschen?'))return;const idv=el.dataset.id;const bucket=({lab:'labs',med:'meds',symptom:'symptoms',medtake:'medTakes',reminder:'reminders',evidence:'evidence',weight:'weights',asthma:'asthmaLogs',measurement:'measurements'})[el.dataset.type]||'measurements';data[bucket]=data[bucket].filter(x=>x.id!==idv);if(bucket==='weights')syncProfileWeight();await save();renderMain();toast('Eintrag gelöscht.');return}
+if(action==='remove'){if(!confirm('Diesen Eintrag endgültig löschen?'))return;const idv=el.dataset.id;const bucket=({lab:'labs',med:'meds',symptom:'symptoms',medtake:'medTakes',reminder:'reminders',evidence:'evidence',weight:'weights',asthma:'asthmaLogs',measurement:'measurements'})[el.dataset.type]||'measurements';if(bucket==='weights'){const next=data.weights.filter(x=>x.id!==idv);await storeWeightJournal(next);data.weights=next;syncProfileWeight();renderMain();toast('Gewichtseintrag gelöscht.');return}data[bucket]=data[bucket].filter(x=>x.id!==idv);await save();renderMain();toast('Eintrag gelöscht.');return}
 if(action==='verify'){
  const m=data.measurements.find(x=>x.id===el.dataset.id);if(!m)return;
  if(m.type==='bp'){
@@ -837,7 +864,7 @@ if(action==='print-emergency'){const p=data.profile;makePrint('Notfallpass',`<di
 if(action==='copy-letter'){const txt=$('#letter-text')?.value||'';if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(txt)}else{$('#letter-text').select();throw Error('Automatisches Kopieren nicht möglich. Bitte Textfeld markieren und manuell kopieren.')}toast('Anschreiben kopiert.');return}
 if(action==='check-update'){await checkUpdate();return}
 if(action==='install-update'){await saveQueue;let reg=await navigator.serviceWorker?.getRegistration();if(!reg?.waiting){await checkUpdate();reg=await navigator.serviceWorker?.getRegistration();}if(reg?.waiting){vkApprovedUpdateReload=true;reg.waiting.postMessage('SKIP_WAITING');const label=$('#update-status');if(label)label.textContent='Update wird nach abgeschlossenen Speichervorgängen aktiviert.';}else toast('Kein Update wartet auf Installation.');return}
-if(action==='wipe'){if(!confirm('ALLE GESUNDHEITSDATEN dieses Geräts endgültig löschen? Nur mit einem externen Backup wiederherstellbar.'))return;if(!confirm('Wirklich alle Daten löschen? Diese Aktion kann nicht rückgängig gemacht werden.'))return;await saveQueue;discardTemporaryPDF();bridgePreview=null;await new Promise((resolve,reject)=>{const t=db.transaction(STORE,'readwrite');t.objectStore(STORE).delete(KEY);t.objectStore(STORE).delete(WEIGHT_DRAFT_KEY);t.oncomplete=resolve;t.onerror=()=>reject(t.error)});data=null;key=null;authPage(false);return}
+if(action==='wipe'){if(!confirm('ALLE GESUNDHEITSDATEN dieses Geräts endgültig löschen? Nur mit einem externen Backup wiederherstellbar.'))return;if(!confirm('Wirklich alle Daten löschen? Diese Aktion kann nicht rückgängig gemacht werden.'))return;await saveQueue;discardTemporaryPDF();bridgePreview=null;await new Promise((resolve,reject)=>{const t=db.transaction(STORE,'readwrite');t.objectStore(STORE).delete(KEY);t.objectStore(STORE).delete(WEIGHT_DRAFT_KEY);t.objectStore(STORE).delete(WEIGHT_JOURNAL_KEY);t.oncomplete=resolve;t.onerror=()=>reject(t.error)});data=null;key=null;authPage(false);return}
 }catch(e){alert(e.message||'Aktion fehlgeschlagen')}}
 root.addEventListener('click',e=>{const point=e.target.closest('[data-chart-info]');if(point){toast(point.dataset.chartInfo||'Messwert');return}const navButton=e.target.closest('[data-view]');if(navButton){view=navButton.dataset.view;labQuery='';common();window.scrollTo(0,0);return}const period=e.target.closest('[data-report]');if(period){reportPeriod=period.dataset.report;renderMain();return}const periodAnalysis=e.target.closest('[data-analysis-days]');if(periodAnalysis){analysisDays=periodAnalysis.dataset.analysisDays;renderMain();return}const chartPeriod=e.target.closest('[data-chart-period]');if(chartPeriod){const t=chartPeriod.dataset.chartType,period=chartPeriod.dataset.chartPeriod;if(Object.prototype.hasOwnProperty.call(chartPeriods,t)&&CHART_PERIODS.some(x=>x[0]===period)){chartPeriods[t]=period;renderMain()}return}const chart=e.target.closest('[data-chart-days]');if(chart){chartWindow=chart.dataset.chartDays;renderMain();return}const action=e.target.closest('[data-action]');if(action)doAction(action)});
 root.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.target?.matches?.('[data-chart-info]')){e.preventDefault();toast(e.target.dataset.chartInfo||'Messwert')}});

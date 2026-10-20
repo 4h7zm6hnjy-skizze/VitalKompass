@@ -1,5 +1,5 @@
 {
-  "version": "1.9.3",
+  "version": "1.9.4",
   "released": "2026-10-20",
-  "notes": "Einmalige Passworteingabe beim App-Start; keine automatische Sperre. Speicherarme iPhone-Verschlüsselung mit verschlüsselter Wiederherstellung unterbrochener Gewichtseinträge. Manuelle Sperre und lokale Verschlüsselung bleiben erhalten."
+  "notes": "Gewicht über echten Button-Klick ohne Formular-Neustart speichern; separater lokal verschlüsselter Gewichtsspeicher statt kompletter Neuverschlüsselung. Passwort beim App-Start bzw. manueller Sperre. Import und Backup kompatibel."
 }
