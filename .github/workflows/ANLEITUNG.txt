@@ -1,0 +1,19 @@
+VitalKompass 2.0.1 – iPhone-Update
+
+1. In GitHub die Datei vitalkompass-201.yml hochladen.
+2. WICHTIG: Der vollständige Pfad MUSS sein:
+   .github/workflows/vitalkompass-201.yml
+3. GitHub »Commit changes« bestätigen und unter Actions den Erfolg prüfen.
+4. Erst nach erfolgreicher Veröffentlichung ist Version 2.0.1 aktiv.
+
+Neu: Bestehende Blutdruck-, Blutzucker-, Gewichts-, Labor-, Asthma- und
+Urologieeinträge nachträglich bearbeiten sowie PDFs, Fotos oder TXT-Dateien
+zu Einträgen hinzufügen und entfernen. Die Werte und Anhänge werden weiter
+lokal AES-GCM-verschlüsselt gespeichert; keine Cloud-/GitHub-Datenübertragung.
+
+Nur Änderungen am Programm auf GitHub hochladen, NIEMALS echte Gesundheitsdaten.
+Vor dem Update möglichst eine verschlüsselte Sicherung in VitalKompass anlegen.
+Das Backup-Passwort sicher aufbewahren.
+PDFs und Dateien, die aus der App exportiert werden, sind nicht automatisch verschlüsselt.
+Bestehende App-Speicherdaten in Safari NICHT löschen.
+Die Bildschirmdarstellung ohne Zoom bleibt erhalten.
