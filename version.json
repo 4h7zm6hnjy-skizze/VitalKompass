@@ -1,5 +1,5 @@
 {
-  "version": "1.9.8",
-  "released": "2026-10-20",
-  "notes": "Feste iPhone-Darstellung: Zoomen per Zwei-Finger-Geste und Doppeltippen unterbunden, kein automatischer Formularzoom; normales vertikales Scrollen bleibt. Keine Aenderungen an Gesundheitsdaten, Verschluesselung oder Passwortsperre."
+  "version": "2.0.0",
+  "released": "2026-10-21",
+  "notes": "Urologie und Prostata mit eigenem verschlüsselten Tagebuch, PSA-Verlauf, IPSS, Untersuchungsinformationen und Nüchtern-Erklärungen. Alle Gesundheitsthemen einzeln oder gemeinsam als PDF, Messwertdiagramme inklusive. Bestehende Daten und feste iPhone-Ansicht bleiben erhalten."
 }

@@ -304,3 +304,19 @@ body{padding-bottom:calc(75px + env(safe-area-inset-bottom))}
 #weight-form input[name="kg"]{font-size:16px;min-height:48px}
 .vk-save-feedback{min-height:1.25em;margin:8px 0 0;color:#14624d;font-weight:600}
 .vk-save-feedback.vk-save-error{color:#a12c36}
+
+
+/* VitalKompass 2.0.0: gut erkennbare Urologie- und Arztbericht-Karten. */
+.vk-uro-topics{display:grid;gap:9px}
+.vk-uro-topics details,.vk-fast-info{border:1px solid #bfd7e5;border-radius:12px;padding:12px 14px;background:#f6fbff}
+.vk-uro-topics summary,.vk-fast-info summary{cursor:pointer;font-weight:750;color:#214c75;min-height:30px}
+.vk-uro-topics p,.vk-fast-info p{margin:10px 0;line-height:1.55}
+.vk-report-list{display:grid;gap:11px;margin:17px 0}
+.vk-report-topic{display:flex;align-items:center;justify-content:space-between;gap:13px;background:#f8fcff;border:1.5px solid #c5dce9;border-radius:14px;padding:13px}
+.vk-report-topic label{display:flex;align-items:center;gap:12px;flex:1;min-width:0;cursor:pointer}
+.vk-report-topic input[type="checkbox"]{flex:none;width:23px;height:23px;min-width:23px;accent-color:#176cac}
+.vk-report-topic strong{display:block;color:#173e62}
+.vk-report-topic small{display:block;font-size:.85rem;color:#506b80;line-height:1.45}
+.vk-report-topic button{min-height:46px;white-space:normal;flex:none}
+@media screen and (max-width:700px){.vk-report-topic{flex-direction:column;align-items:stretch}.vk-report-topic label{min-height:45px}.vk-report-topic button{width:100%;min-height:49px}}
+@media print{.vk-report-topic button{display:none}}
