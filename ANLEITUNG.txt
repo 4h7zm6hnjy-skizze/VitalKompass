@@ -1,22 +1,19 @@
-VitalKompass 2.0.0 – Reparatur eines automatischen GitHub-Tests
+VitalKompass 2.0.1 – iPhone-Update
 
-Ausgangslage: Version 1.9.8 bleibt aktiv. Der erste 2.0.0-Versuch hat die neue
-App NICHT veröffentlicht. Ein Test-Hilfswert (sortdate) fehlte nur in der
-Testumgebung, nicht in der App.
+1. In GitHub die Datei vitalkompass-201.yml hochladen.
+2. WICHTIG: Der vollständige Pfad MUSS sein:
+   .github/workflows/vitalkompass-201.yml
+3. GitHub »Commit changes« bestätigen und unter Actions den Erfolg prüfen.
+4. Erst nach erfolgreicher Veröffentlichung ist Version 2.0.1 aktiv.
 
-Installation auf iPhone:
-1. vitalkompass-200-reparatur.yml aus dem ZIP entpacken.
-2. Auf GitHub in VitalKompass das Verzeichnis .github/workflows öffnen.
-3. Datei dort hochladen und "Commit changes" bestätigen.
-4. EXAKTER Pfad muss lauten:
-   .github/workflows/vitalkompass-200-reparatur.yml
-5. GitHub Actions startet die Installation und Tests automatisch. Erst wenn
-   "Success" erscheint und GitHub Pages erfolgreich veröffentlicht hat,
-   ist 2.0.0 installiert.
+Neu: Bestehende Blutdruck-, Blutzucker-, Gewichts-, Labor-, Asthma- und
+Urologieeinträge nachträglich bearbeiten sowie PDFs, Fotos oder TXT-Dateien
+zu Einträgen hinzufügen und entfernen. Die Werte und Anhänge werden weiter
+lokal AES-GCM-verschlüsselt gespeichert; keine Cloud-/GitHub-Datenübertragung.
 
-Wenn GitHub die Datei ins Hauptverzeichnis hochlädt:
-Die dortige Datei in GitHub bearbeiten und den Dateinamen in
-.github/workflows/vitalkompass-200-reparatur.yml ändern, Commit bestätigen.
-
-Keine Gesundheitsdaten oder Backups bei GitHub hochladen. Die vorhandenen
-verschlüsselten Daten und das App-Passwort werden nicht geändert.
+Nur Änderungen am Programm auf GitHub hochladen, NIEMALS echte Gesundheitsdaten.
+Vor dem Update möglichst eine verschlüsselte Sicherung in VitalKompass anlegen.
+Das Backup-Passwort sicher aufbewahren.
+PDFs und Dateien, die aus der App exportiert werden, sind nicht automatisch verschlüsselt.
+Bestehende App-Speicherdaten in Safari NICHT löschen.
+Die Bildschirmdarstellung ohne Zoom bleibt erhalten.

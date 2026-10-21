@@ -1,0 +1,222 @@
+name: VitalKompass 2.0.1 - Bearbeiten und Anhaenge
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/vitalkompass-201.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vk201-edit-attachments
+  cancel-in-progress: false
+
+jobs:
+  edit-and-attachments:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Bestehende App laden
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: true
+      - name: Version pruefen
+        shell: bash
+        run: |
+          python3 -c 'import json; v=json.load(open("version.json",encoding="utf8"))["version"]; assert v in ("2.0.0","2.0.1"), "Unerwartete Versionsnummer: "+v'
+      - name: Alte Version unveraendert pruefen und Update vorbereiten
+        shell: bash
+        run: |
+          if python3 -c 'import json; raise SystemExit(0 if json.load(open("version.json",encoding="utf8"))["version"] == "2.0.1" else 1)'; then
+            echo 'Bereits Version 2.0.1 vorhanden, kontrolliere Tests.'
+          else
+          cat > /tmp/vk201_edit_module.js <<'VK201EDITOR'
+          /* VK201 EDIT MODULE BEGIN – local encrypted entry correction and attachments. */
+          const VK201_LIMIT=1536*1024, VK201_TOTAL=12*1024*1024, VK201_PER_ENTRY=4;
+          const VK201_MIME=new Set(['application/pdf','image/jpeg','image/png','text/plain']);
+          let vk201Busy=false;
+          function vk201Bucket(type){return ({glucose:'measurements',bp:'measurements',weight:'weights',lab:'labs',asthma:'asthmaLogs',urology:'urologyLogs'})[type]||''}
+          function vk201Lookup(type,entryId){const bucket=vk201Bucket(type);if(!bucket||!data)return null;const index=(data[bucket]||[]).findIndex(x=>x.id===entryId&&(bucket!=='measurements'||x.type===type));return index>=0?{bucket,index,entry:data[bucket][index]}:null}
+          function vk201Files(record){return Array.isArray(record?.attachments)?record.attachments:[]}
+          function vk201ValidateFile(item){return item&&typeof item.name==='string'&&item.name.length>0&&item.name.length<=120&&VK201_MIME.has(item.mime)&&typeof item.base64==='string'&&item.base64.length<=Math.ceil(VK201_LIMIT/3)*4+8&&item.base64.length>0&&item.base64.length%4===0&&/^[a-zA-Z0-9+/]*={0,2}$/.test(item.base64)&&Number.isInteger(item.size)&&item.size>0&&item.size<=VK201_LIMIT&&Math.floor(item.base64.length*3/4)-(item.base64.endsWith('==')?2:item.base64.endsWith('=')?1:0)===item.size}
+          function vk201ValidateAll(files){return Array.isArray(files)&&files.length<=VK201_PER_ENTRY&&files.every(vk201ValidateFile)}
+          function vk201BackupWithinLimit(vault){let used=(vault.evidence||[]).reduce((n,x)=>n+(x.base64?.length||0)*.75,0);for(const bucket of ['measurements','weights','labs','asthmaLogs','urologyLogs'])for(const row of vault[bucket]||[])used+=vk201Files(row).reduce((n,a)=>n+a.size,0);return used<=VK201_TOTAL}
+          function vk201UsedBytes(skip){const buckets=['measurements','weights','labs','asthmaLogs','urologyLogs'];let used=(data.evidence||[]).reduce((n,x)=>n+(x.base64?.length||0)*.75,0);for(const bucket of buckets){for(const r of data[bucket]||[]){if(r===skip||r.id===skip?.id)continue;used+=vk201Files(r).reduce((n,a)=>n+a.size,0)}}return used}
+          function vk201Close(){document.getElementById('vk201-editor')?.remove()}
+          function vk201OptionSet(dict,value){return Object.entries(dict).map(([key,name])=>`<option value="${h(key)}" ${key===value?'selected':''}>${h(name)}</option>`).join('')}
+          function vk201Field(label,name,value,extra=''){return `<label class="field"><span>${h(label)}</span><input name="${h(name)}" value="${h(value??'')}" ${extra}></label>`}
+          function vk201AttachmentsHtml(entry){const files=vk201Files(entry);return `<fieldset class="vk201-files"><legend>Anhänge / Befunde</legend><p class="section-note">PDF, JPG, PNG oder TXT – maximal 1,5 MB je Datei, vier Anhänge je Eintrag und 12 MB insgesamt einschließlich der Nachweise. Dateien werden verschlüsselt gespeichert und in verschlüsselte Backups aufgenommen.</p>${files.length?files.map((a,i)=>`<label class="vk201-attachment-row"><input type="checkbox" name="remove-file" value="${i}"><span><strong>${h(a.name)}</strong><small> · ${Math.round(a.size/1024)} KB · durch Häkchen entfernen</small></span><button type="button" class="secondary" data-vk201-download="${i}">Öffnen / sichern</button></label>`).join(''):'<p class="muted">Noch kein Anhang vorhanden.</p>'}<label class="field"><span>Neue Datei(en) hinzufügen</span><input type="file" name="newFiles" accept=".pdf,.jpg,.jpeg,.png,.txt,application/pdf,image/jpeg,image/png,text/plain" multiple></label></fieldset>`}
+          function vk201Open(type,entryId){if(vk201Busy)throw Error('Ein Speichervorgang läuft noch.');const found=vk201Lookup(type,entryId);if(!found)throw Error('Eintrag wurde nicht gefunden.');if(type==='weight'&&weightJournalReadOnly)throw Error('Das Gewichtstagebuch ist schreibgeschützt.');
+           const x=found.entry;let fields='';
+           const shared=`<div class="form-grid">${vk201Field('Datum','date',x.date,'type="date" required')}${vk201Field('Uhrzeit','time',x.time||'00:00','type="time" required')}</div>`;
+           if(type==='glucose')fields=shared+`<div class="form-grid">${vk201Field('Blutzucker','glucoseValue',nf(x.mgdl,1),'type="text" inputmode="decimal" required')}<label class="field"><span>Einheit</span><select name="glucoseUnit"><option value="mgdl">mg/dl</option><option value="mmol">mmol/l</option></select></label><label class="field"><span>Messsituation</span><select name="period">${vk201OptionSet(gLabels,x.period)}</select></label></div>`+vk201Field('Notiz','note',x.note||'','maxlength="400"');
+           else if(type==='bp')fields=shared+`<div class="form-grid">${vk201Field('Systolisch (mmHg)','sys',x.sys,'type="number" min="40" max="320" required')}${vk201Field('Diastolisch (mmHg)','dia',x.dia,'type="number" min="20" max="220" required')}${vk201Field('Puls (/min, optional)','pulse',x.pulse??'','type="number" min="20" max="240"')}<label class="field"><span>Bezug zu Mahlzeiten</span><select name="mealTiming">${vk201OptionSet(bpMealLabels,x.mealTiming||'unknown')}</select></label></div>`+vk201Field('Notiz','note',x.note||'','maxlength="400"');
+           else if(type==='weight')fields=shared+`<div class="form-grid">${vk201Field('Gewicht (kg)','kg',String(x.kg).replace('.',','),'type="text" inputmode="decimal" required')}<label class="field"><span>Wann gewogen?</span><select name="mealTiming">${vk201OptionSet(Object.fromEntries(Object.entries(bpMealLabels).filter(([k])=>k!=='unknown')),x.mealTiming)}</select></label></div>`+vk201Field('Notiz','note',x.note||'','maxlength="300"');
+           else if(type==='lab')fields=shared+`<div class="form-grid">${vk201Field('Laborparameter','name',x.name,'maxlength="150" required')}${vk201Field('Wert','value',x.value,'type="text" inputmode="decimal" required')}${vk201Field('Einheit','unit',x.unit||'','maxlength="40"')}${vk201Field('Labor / Arzt','place',x.place||'','maxlength="150"')}${vk201Field('Referenz von (optional)','low',x.low??'','type="text" inputmode="decimal"')}${vk201Field('Referenz bis (optional)','high',x.high??'','type="text" inputmode="decimal"')}</div>`+vk201Field('Notiz','note',x.note||'','maxlength="500"');
+           else if(type==='asthma')fields=shared+`<div class="form-grid">${vk201Field('Atemnot (0–10)','breathlessness',x.breathlessness,'type="number" min="0" max="10" required')}${vk201Field('Bedarfsanwendungen (0–50)','rescueUses',x.rescueUses,'type="number" min="0" max="50" required')}${vk201Field('Peak-Flow (optional)','peakFlow',x.peakFlow??'','type="number" min="50" max="1000"')}${vk201Field('FEV1 (%, optional)','fev1Pct',x.fev1Pct??'','type="text" inputmode="decimal"')}</div>`+vk201Field('Notiz','note',x.note||'','maxlength="1000"')+'<p class="section-note">Bereits erfasste Auslöser bleiben erhalten. Auslöser können im Asthma-Formular geändert werden.</p>';
+           else if(type==='urology')fields=shared+(x.type==='ipss'?'<p>Die sieben IPSS-Fragen und die Lebensqualität bearbeitest du weiterhin im IPSS-Formular. Hier lassen sich Datum, Uhrzeit und Anhänge korrigieren.</p>':`<div class="form-grid"><label class="field"><span>Urologisches Thema</span><select name="kind">${vk201OptionSet(VK_URO_KINDS,x.kind)}</select></label><label class="field"><span>Schwere</span><select name="severity">${vk201OptionSet({none:'Keine Beschwerden',mild:'Leicht',moderate:'Mittel',severe:'Stark'},x.severity)}</select></label>${vk201Field('Toilettengänge tagsüber','day',x.day??'','type="number" min="0" max="60"')}${vk201Field('Nächtliche Toilettengänge','night',x.night??'','type="number" min="0" max="30"')}</div>${vk201Field('Befund','finding',x.finding||'','maxlength="1200"')}${vk201Field('Notiz','note',x.note||'','maxlength="2000"')}`);
+           vk201Close();const d=document.createElement('div');d.id='vk201-editor';d.className='vk201-overlay';d.innerHTML=`<section class="vk201-sheet" role="dialog" aria-modal="true" aria-label="Eintrag bearbeiten"><header><h2>Eintrag bearbeiten – ${h(({bp:'Blutdruck',glucose:'Blutzucker',weight:'Gewicht',lab:'Labor',asthma:'Asthma',urology:'Urologie'})[type])}</h2><button type="button" class="secondary" data-vk201-close="1">Schließen</button></header><form id="vk201-entry-form" novalidate data-vk201-type="${h(type)}" data-vk201-id="${h(entryId)}"><p class="section-note">Korrekturen ändern denselben Eintrag. Bisherige Einträge und Diagrammverläufe bleiben erhalten.</p>${fields}${vk201AttachmentsHtml(x)}<div class="vk201-actions"><button type="submit" class="primary">Änderungen speichern</button><button type="button" class="secondary" data-vk201-close="1">Abbrechen</button></div><p role="status" aria-live="polite" class="vk201-feedback"></p></form></section>`;document.body.append(d);d.querySelector('input,select,button')?.focus();}
+          function vk201Num(f,name,optional=false){let raw=String(f.get(name)??'').trim();return optional&&raw===''?null:nval(raw)}
+          function vk201NewValue(type,old,f){const o={...old,date:String(f.get('date')||''),time:String(f.get('time')||'')};if(!dateValid(o.date)||o.date>today()||!timeValid(o.time))throw Error('Datum und Uhrzeit prüfen.');
+           if(type==='glucose'){const u=f.get('glucoseUnit');if(!['mgdl','mmol'].includes(u)||!Object.hasOwn(gLabels,String(f.get('period'))))throw Error('Messsituation oder Einheit ungültig.');const input=vk201Num(f,'glucoseValue');const mgdl=u==='mmol'?input*18.0182:input;if(!Number.isFinite(mgdl)||mgdl<10||mgdl>700)throw Error('Blutzuckerwert außerhalb der Eingabegrenzen.');o.mgdl=Math.round(mgdl*10)/10;o.period=String(f.get('period'));o.note=String(f.get('note')||'').slice(0,400)}
+           else if(type==='bp'){o.sys=vk201Num(f,'sys');o.dia=vk201Num(f,'dia');o.pulse=vk201Num(f,'pulse',true);o.mealTiming=String(f.get('mealTiming'));o.note=String(f.get('note')||'').slice(0,400);if(!Number.isFinite(o.sys)||!Number.isFinite(o.dia)||o.sys<=o.dia||o.sys<40||o.sys>320||o.dia<20||o.dia>220||(o.pulse!==null&&(!Number.isFinite(o.pulse)||o.pulse<20||o.pulse>240))||!Object.hasOwn(bpMealLabels,o.mealTiming))throw Error('Blutdruck und Puls überprüfen.')}
+           else if(type==='weight'){o.kg=vk201Num(f,'kg');o.mealTiming=String(f.get('mealTiming'));o.note=String(f.get('note')||'').slice(0,300);if(!Number.isFinite(o.kg)||o.kg<20||o.kg>400||o.mealTiming==='unknown'||!Object.hasOwn(bpMealLabels,o.mealTiming))throw Error('Gewicht und Messzeitpunkt überprüfen.');o.kg=Math.round(o.kg*10)/10}
+           else if(type==='lab'){o.name=String(f.get('name')||'').trim();o.value=vk201Num(f,'value');o.unit=String(f.get('unit')||'').slice(0,40);o.place=String(f.get('place')||'').slice(0,150);o.low=vk201Num(f,'low',true);o.high=vk201Num(f,'high',true);o.note=String(f.get('note')||'').slice(0,500);if(!o.name||o.name.length>150||!Number.isFinite(o.value)||(o.low!==null&&!Number.isFinite(o.low))||(o.high!==null&&!Number.isFinite(o.high))||(o.low!==null&&o.high!==null&&o.high<o.low))throw Error('Laborangaben und Referenzbereiche prüfen.')}
+           else if(type==='asthma'){o.breathlessness=vk201Num(f,'breathlessness');o.rescueUses=vk201Num(f,'rescueUses');o.peakFlow=vk201Num(f,'peakFlow',true);o.fev1Pct=vk201Num(f,'fev1Pct',true);o.note=String(f.get('note')||'').slice(0,1000);if(!Number.isInteger(o.breathlessness)||o.breathlessness<0||o.breathlessness>10||!Number.isInteger(o.rescueUses)||o.rescueUses<0||o.rescueUses>50||(o.peakFlow!==null&&(!Number.isFinite(o.peakFlow)||o.peakFlow<50||o.peakFlow>1000))||(o.fev1Pct!==null&&(!Number.isFinite(o.fev1Pct)||o.fev1Pct<5||o.fev1Pct>140)))throw Error('Asthma-Werte überprüfen.')}
+           else if(type==='urology'){if(o.type==='entry'){o.kind=String(f.get('kind'));o.severity=String(f.get('severity'));const day=vk201Num(f,'day',true),night=vk201Num(f,'night',true);o.day=day;o.night=night;o.finding=String(f.get('finding')||'').slice(0,1200);o.note=String(f.get('note')||'').slice(0,2000)}if(!vkUroValidate(o))throw Error('Urologische Angaben prüfen.')}
+           return o;
+          }
+          async function vk201ReadNew(files){const out=[];for(const file of files){if(!(file instanceof File)||file.size===0)continue;let mime=file.type;if(mime==='application/octet-stream'||!mime){const lower=file.name.toLowerCase();mime=lower.endsWith('.pdf')?'application/pdf':/\.jpe?g$/.test(lower)?'image/jpeg':lower.endsWith('.png')?'image/png':lower.endsWith('.txt')?'text/plain':'';}if(!VK201_MIME.has(mime)||file.size>VK201_LIMIT||file.size<=0)throw Error('Nur PDF, JPG, PNG oder TXT bis 1,5 MB je Anhang erlaubt.');const bytes=new Uint8Array(await file.arrayBuffer());const sig=Array.from(bytes.slice(0,8));if(mime==='application/pdf'&&String.fromCharCode(...sig.slice(0,4))!=='%PDF'||mime==='image/jpeg'&&!(sig[0]===255&&sig[1]===216&&sig[2]===255)||mime==='image/png'&&sig.slice(0,4).join(',')!=='137,80,78,71')throw Error('Dateiformat und Dateiinhalt stimmen nicht überein.');out.push({name:file.name.replace(/[\\/\x00-\x1f]/g,'_').slice(0,120)||'Anhang',mime,size:bytes.byteLength,base64:b64(bytes)})}return out}
+          async function vk201SaveEditor(form){if(vk201Busy)throw Error('Speichern läuft bereits.');if(weightSaveInProgress)throw Error('Gewichtsspeicherung läuft noch.');const type=form.dataset.vk201Type,entryId=form.dataset.vk201Id,found=vk201Lookup(type,entryId);if(!found)throw Error('Eintrag wurde nicht gefunden.');if(found.bucket==='weights'&&weightJournalReadOnly)throw Error('Gewichtstagebuch ist nicht lesbar; Änderungen gesperrt.');
+           const submit=form.querySelector('[type="submit"]');vk201Busy=true;if(submit)submit.disabled=true;try{
+           const f=new FormData(form),fresh=vk201NewValue(type,found.entry,f),previous=vk201Files(found.entry);if(!vk201ValidateAll(previous))throw Error('Gespeicherte Anhänge sind ungültig. Bitte nichts löschen und den Speicher prüfen.');
+           const removals=new Set(f.getAll('remove-file').map(String));if([...removals].some(i=>!/^(0|[1-9]\d*)$/.test(i)||Number(i)>=previous.length))throw Error('Anhangsauswahl ungültig.');const keep=previous.filter((_,i)=>!removals.has(String(i)));const candidates=[...form.querySelectorAll('input[name="newFiles"]')].flatMap(e=>[...e.files]);if(candidates.filter(file=>file?.size>0).length+keep.length>VK201_PER_ENTRY)throw Error('Maximal vier Anhänge je Eintrag.');const added=await vk201ReadNew(candidates);fresh.attachments=[...keep,...added];if(!vk201ValidateAll(fresh.attachments))throw Error('Maximal vier Anhänge je Eintrag und jeweils höchstens 1,5 MB.');if(vk201UsedBytes(found.entry)+fresh.attachments.reduce((n,a)=>n+a.size,0)>VK201_TOTAL)throw Error('Dokumentenspeicher 12 MB insgesamt überschritten. Bitte ältere Anhänge auslagern.');
+           if(found.bucket==='weights'){
+             weightSaveInProgress=true;try{const next=[...data.weights];next[found.index]=fresh;await writeWeightDraft(fresh);await storeWeightJournal(next);data.weights=next;syncProfileWeight();try{await clearWeightDraft()}catch{}}
+             finally{weightSaveInProgress=false}
+            }else{const before=data[found.bucket],next=[...before];next[found.index]=fresh;data[found.bucket]=next;try{await save()}catch(e){data[found.bucket]=before;throw e}}
+            vk201Close();renderMain();toast('Änderungen und Anhänge verschlüsselt gespeichert.');
+           }finally{vk201Busy=false;if(submit?.isConnected)submit.disabled=false}
+          }
+          document.addEventListener('click',ev=>{const close=ev.target.closest('[data-vk201-close]');if(close){if(!vk201Busy)vk201Close();return}const a=ev.target.closest('[data-vk201-download]');if(a){const form=a.closest('#vk201-entry-form'),r=form&&vk201Lookup(form.dataset.vk201Type,form.dataset.vk201Id),file=r&&vk201Files(r.entry)[Number(a.dataset.vk201Download)];if(!file||!vk201ValidateFile(file))return;sendDownload(unb64(file.base64),file.name,'application/octet-stream');toast('Anhang wurde zum Sichern bereitgestellt. Exportierte Dateien sind nicht verschlüsselt.')}});
+          document.addEventListener('submit',async ev=>{if(ev.target.id!=='vk201-entry-form')return;ev.preventDefault();const f=ev.target;try{await vk201SaveEditor(f)}catch(e){const t=f.querySelector('.vk201-feedback');if(t)t.textContent=e.message||'Speichern fehlgeschlagen.';alert(e.message||'Bearbeitung fehlgeschlagen.')}});
+          /* VK201 EDIT MODULE END */
+          VK201EDITOR
+          cat > /tmp/vk201_styles.css <<'VK201STYLE'
+          /* VK201 iPhone edit dialog: stable width, no pinch zoom, vertical scroll only. */
+          .vk201-overlay{position:fixed;inset:0;z-index:10000;background:#09243dc4;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;overscroll-behavior:contain;padding:12px max(12px,env(safe-area-inset-right)) calc(22px + env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left))}
+          .vk201-sheet{background:#fff;color:#17314c;border:1px solid #b8d0e1;border-radius:18px;box-shadow:0 15px 45px #09243d55;padding:15px;width:100%;max-width:650px;min-width:0}
+          .vk201-sheet header{display:flex;justify-content:space-between;align-items:center;gap:10px;position:sticky;top:-12px;z-index:2;padding:10px 0;background:#fff;border-bottom:1px solid #d7e4ef}
+          .vk201-sheet h2{font-size:1.19rem;margin:0;line-height:1.3}
+          .vk201-sheet .form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;margin:12px 0}
+          .vk201-sheet input,.vk201-sheet select,.vk201-sheet textarea{min-width:0;max-width:100%;font-size:16px}
+          .vk201-sheet .field{display:grid;gap:5px;margin:12px 0}
+          .vk201-sheet .field input,.vk201-sheet .field select{min-height:46px}
+          .vk201-files{border:2px solid #accdde;border-radius:13px;padding:12px;margin:18px 0;min-width:0}
+          .vk201-files legend{font-weight:800;color:#1b5987;padding:0 6px}
+          .vk201-attachment-row{display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:1px solid #dfeaf1;flex-wrap:wrap}
+          .vk201-attachment-row input{width:22px;height:22px;flex:none}
+          .vk201-attachment-row span{flex:1;min-width:120px;overflow-wrap:anywhere}
+          .vk201-attachment-row small{color:#52677b}
+          .vk201-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:16px 0}
+          .vk201-actions button{min-height:52px}
+          .vk201-feedback{color:#9e2937;font-weight:700;min-height:1em}
+          @media(max-width:560px){.vk201-sheet .form-grid{grid-template-columns:1fr}.vk201-sheet{padding:13px}.vk201-sheet header{top:-12px}.vk201-actions{grid-template-columns:1fr}}
+          @media print{.vk201-overlay{display:none!important}}
+          VK201STYLE
+          cat > /tmp/vk201_patch.py <<'VK201PATCH'
+          from pathlib import Path
+          import hashlib, json
+          EXPECTED={
+          'app.js':'d114d0b9a528d00bf19a98c7b5bb4fcbac412f52',
+          'sw.js':'37f6429f32f2fa7b657dcbefb56eecf15c4fdbe3',
+          'style.css':'2d27ddf1138a52b813451e02b4b51ca2b2992f28',
+          'version.json':'2e78025b3594a11e3f2b2e0a34f4e4377a6fc7a6'}
+          def read(name):
+              b=Path(name).read_bytes()
+              sha=hashlib.sha1(b'blob '+str(len(b)).encode()+b'\0'+b).hexdigest()
+              if sha!=EXPECTED[name]:raise RuntimeError(f'{name}: abweichender Stand {sha}; Installation zur Sicherheit gestoppt')
+              return b.decode('utf-8')
+          def once(s,old,new):
+              c=s.count(old)
+              if c!=1:raise RuntimeError(f'Fundstelle nicht eindeutig {c}: {old[:85]}')
+              return s.replace(old,new,1)
+          a=read('app.js');css=read('style.css');sw=read('sw.js');read('version.json')
+          a=once(a,"const VERSION='2.0.0'","const VERSION='2.0.1'")
+          a=once(a,'function pageDoctorReport(){', Path('/tmp/vk201_edit_module.js').read_text(encoding='utf-8')+'\nfunction pageDoctorReport(){')
+          # Existing measurements and labs: direct edit buttons, retaining photo confirmation if needed.
+          a=once(a,'<button data-action="remove" data-type="measurement" data-id="${h(r.id)}"','<button data-action="vk201-edit" data-vk201-type="${type}" data-id="${h(r.id)}" type="button" class="secondary">Bearbeiten / Anhang</button> <button data-action="remove" data-type="measurement" data-id="${h(r.id)}"')
+          a=once(a,'<button data-action="remove" data-type="lab" data-id="${h(x.id)}"','<button data-action="vk201-edit" data-vk201-type="lab" data-id="${h(x.id)}" type="button" class="secondary">Bearbeiten / Anhang</button> <button data-action="remove" data-type="lab" data-id="${h(x.id)}"')
+          a=once(a,'data-action="edit-weight" data-id="${h(r.id)}"','data-action="vk201-edit" data-vk201-type="weight" data-id="${h(r.id)}"')
+          a=once(a,'<button data-action="edit-asthma" data-id="${h(r.id)}" class="secondary" type="button">Bearbeiten</button>','<button data-action="edit-asthma" data-id="${h(r.id)}" class="secondary" type="button">Auslöser bearbeiten</button> <button data-action="vk201-edit" data-vk201-type="asthma" data-id="${h(r.id)}" class="secondary" type="button">Werte / Anhänge</button>')
+          a=once(a,'<button type="button" class="secondary" data-action="edit-uro" data-id="${h(r.id)}">Bearbeiten</button>','<button type="button" class="secondary" data-action="edit-uro" data-id="${h(r.id)}">IPSS / Details</button> <button type="button" class="secondary" data-action="vk201-edit" data-vk201-type="urology" data-id="${h(r.id)}">Datum / Anhänge</button>')
+          # Show whether supporting documents are already attached.
+          a=once(a,"${h(r.note||'')} ${type==='glucose'?glucoseWarnings(r)","${h(r.note||'')} ${vk201Files(r).length?`<span class=\"chip\">${vk201Files(r).length} Anhang/Anhänge</span>`:''} ${type==='glucose'?glucoseWarnings(r)")
+          a=once(a,"${r.note?`<p class=\"section-note\">${h(r.note)}</p>`:''}</td>","${r.note?`<p class=\"section-note\">${h(r.note)}</p>`:''}${vk201Files(r).length?`<small> · ${vk201Files(r).length} Anhang/Anhänge</small>`:''}</td>")
+          a=once(a,"${x.note?`<br><small>${h(x.note)}</small>`:''}</td>","${x.note?`<br><small>${h(x.note)}</small>`:''}${vk201Files(x).length?`<br><small>${vk201Files(x).length} Anhang/Anhänge</small>`:''}</td>")
+          # Keep existing attachments if old editing forms used, including imported notes.
+          a=once(a,'const next=data.weights.map(x=>({...x}));if(at>=0)next[at]=entry;else next.push(entry);', 'if(at>=0)entry.attachments=vk201Files(data.weights[at]);\n const next=data.weights.map(x=>({...x}));if(at>=0)next[at]=entry;else next.push(entry);')
+          a=once(a,'const previousAsthma=data.asthmaLogs;data.asthmaLogs=previousAsthma.map(x=>({...x}));','if(at>=0)entry.attachments=vk201Files(data.asthmaLogs[at]);\n const previousAsthma=data.asthmaLogs;data.asthmaLogs=previousAsthma.map(x=>({...x}));')
+          a=a.replace('data.urologyLogs=before.map(x=>({...x}));if(at<0)data.urologyLogs.push(entry);else data.urologyLogs[at]=entry;', 'if(at>=0)entry.attachments=vk201Files(before[at]);\n data.urologyLogs=before.map(x=>({...x}));if(at<0)data.urologyLogs.push(entry);else data.urologyLogs[at]=entry;')
+          if a.count('if(at>=0)entry.attachments=vk201Files(before[at]);')!=2:raise RuntimeError('Urologie-Felder nicht vollständig gesichert')
+          # Safe action, guard editing while weight journal is busy.
+          a=once(a,"if(action==='save-weight'){", "if(action==='vk201-edit'){vk201Open(String(el.dataset.vk201Type||''),String(el.dataset.id||''));return}\nif(action==='save-weight'){")
+          a=once(a,"if(action==='lock'){if(weightSaveInProgress)","if(action==='lock'){if(vk201Busy)throw Error('Ein Bearbeitungsvorgang läuft noch.');vk201Close();if(weightSaveInProgress)")
+          # Validate optional attachments in new backups without invalidating old backup files without the field.
+          a=once(a,' if(!x.measurements.every(', " for(const bucket of ['measurements','weights','labs','asthmaLogs','urologyLogs'])for(const entry of x[bucket]||[]){if(entry.attachments!==undefined&&!vk201ValidateAll(entry.attachments))throw Error('Backup enthält ungültige Anhänge.');}\n if(!vk201BackupWithinLimit(x))throw Error('Backup: Anhangsspeicher zu groß.');\n if(!x.measurements.every(")
+          # Bump cache to refresh JS and CSS, without migrating or wiping private IndexedDB.
+          sw=once(sw,'VitalKompass 2.0.0: urology and flexible PDF exports','VitalKompass 2.0.1: measurement editing and encrypted attachments')
+          sw=once(sw,'vital-kompass-2.0.0-urology-reports','vital-kompass-2.0.1-edit-attachments')
+          css += '\n'+Path('/tmp/vk201_styles.css').read_text(encoding='utf-8')
+          version={"version":"2.0.1","released":"2026-10-21","notes":"Nachträgliches Bearbeiten von Blutzucker, Blutdruck, Gewicht, Labor, Asthma und Urologie samt Datum, Uhrzeit, Messsituation, Werten, Notizen und verschlüsselten Anhängen (PDF/JPG/PNG/TXT). Datenerhalt, bestehender Tresor, PDF-Berichte und feste iPhone-Ansicht bleiben."}
+          for name,body in [('app.js',a),('sw.js',sw),('style.css',css),('version.json',json.dumps(version,ensure_ascii=False,indent=2)+'\n')]:Path(name).write_text(body,encoding='utf-8')
+          print('VitalKompass 2.0.1 Patch erstellt',[(x,Path(x).stat().st_size)for x in EXPECTED])
+          VK201PATCH
+          python3 /tmp/vk201_patch.py
+          fi
+      - name: Syntax, Speicher, Eingaben und Rueckfalltests pruefen
+        shell: bash
+        run: |
+          node --check app.js
+          node --check sw.js
+          node --check pdf-export.js
+          node --check vkpro.js
+          python3 -m json.tool version.json > /dev/null
+          cat > /tmp/vk201_test.js <<'VK201TEST'
+          'use strict';
+          const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+          for(const file of ['app.js','sw.js','pdf-export.js','vkpro.js'])new vm.Script(fs.readFileSync(file,'utf8'),{filename:file});
+          const app=fs.readFileSync('app.js','utf8'),style=fs.readFileSync('style.css','utf8'),html=fs.readFileSync('index.html','utf8'),version=JSON.parse(fs.readFileSync('version.json','utf8')); 
+          assert.equal(version.version,'2.0.1');
+          for(const t of ["const VERSION='2.0.1'",'VK201 EDIT MODULE BEGIN','function vk201Open','function vk201SaveEditor','function vk201ValidateAll','function vk201NewValue','data-vk201-type="${type}"','data-vk201-type="weight"','data-vk201-type="lab"','data-vk201-type="asthma"','data-vk201-type="urology"',"if(action==='vk201-edit')",'entry.attachments=vk201Files(data.weights[at])','entry.attachments=vk201Files(data.asthmaLogs[at])','if(at>=0)entry.attachments=vk201Files(before[at]);','vk201Close();if(weightSaveInProgress)','urology:pageUrology','doctor:pageReportPlus','VK198 FIXED_VIEW_BEGIN',"DB='vitalkompass-secure-v1'",'AES-GCM',"if(entry.attachments!==undefined&&!vk201ValidateAll(entry.attachments))"])assert(app.includes(t),`Fehlender Code: ${t}`);
+          assert(html.includes('user-scalable=no'));
+          assert(style.includes('.vk201-overlay')&&style.includes('font-size:16px'));
+          assert(fs.readFileSync('sw.js','utf8').includes('vital-kompass-2.0.1-edit-attachments'));
+          const begin=app.indexOf('/* VK201 EDIT MODULE BEGIN'),end=app.indexOf('/* VK201 EDIT MODULE END */');assert(begin>0&&end>begin);
+          const ext=app.slice(begin,end+'/* VK201 EDIT MODULE END */'.length);
+          let saveThrows=false,saves=0,weightSaves=0;
+          const initial={measurements:[{id:'b',type:'bp',date:'2026-10-20',time:'07:00',sys:145,dia:85,pulse:70,mealTiming:'unknown',note:'alt',verified:true},{id:'g',type:'glucose',date:'2026-10-20',time:'07:01',mgdl:105,period:'fasting',note:'alt',verified:true}],weights:[{id:'w',date:'2026-10-20',time:'08:01',kg:130.5,mealTiming:'before_breakfast',note:'old'}],labs:[{id:'l',type:'lab',date:'2026-10-20',time:'',name:'PSA gesamt',value:1.5,unit:'ng/ml'}],asthmaLogs:[],urologyLogs:[],evidence:[]};
+          const ctx={console,document:{addEventListener(){},getElementById(){return null},body:{append(){}},createElement(){return {remove(){}}}},FormData:class{constructor(form){this.f=form}get(k){return this.f.values[k]??null}getAll(k){return this.f.values[k]||[]}}, File:class{},Date,Math,Object,Number,Set,Uint8Array,Array,
+           data:structuredClone(initial),weightSaveInProgress:false,weightJournalReadOnly:false,toast(){},renderMain(){},save:async()=>{saves++;if(saveThrows)throw Error('Speicherfehler')},writeWeightDraft:async()=>{},storeWeightJournal:async()=>{weightSaves++},syncProfileWeight(){},clearWeightDraft:async()=>{},
+           dateValid:v=>/^\d{4}-\d{2}-\d{2}$/.test(v),timeValid:v=>/^\d\d:\d\d$/.test(v),today:()=> '2026-10-21',nval:v=>v==null||String(v).trim()===''?NaN:Number(String(v).replace(',','.')),
+           gLabels:{fasting:'Nüchtern',before:'Vor dem Essen',after:'Nach dem Essen',other:'Sonstige'},bpMealLabels:{unknown:'Keine Angabe',before_breakfast:'Vor dem Frühstück',after_breakfast:'Nach dem Frühstück',before_lunch:'Vor Mittag',after_lunch:'Nach Mittag'},VK_URO_KINDS:{prostate:'Prostata'},vkUroValidate:()=>true,
+           h:s=>String(s??''),nf:n=>String(n),b64:a=>Buffer.from(a).toString('base64'),unb64:s=>Uint8Array.from(Buffer.from(s,'base64')),sendDownload(){},alert(){},root:{}};
+          vm.runInNewContext(ext+'\nglobalThis.VK201={vk201Lookup,vk201ValidateAll,vk201ValidateFile,vk201NewValue,vk201SaveEditor,vk201UsedBytes,vk201Files}',ctx);
+          const T=ctx.VK201;
+          const f=(values)=>({get:k=>Object.prototype.hasOwnProperty.call(values,k)?values[k]:null});
+          const base={date:'2026-10-20',time:'10:20',note:'korrigiert'};
+          const good=T.vk201NewValue('glucose',ctx.data.measurements[1],f({...base,glucoseValue:'6,0',glucoseUnit:'mmol',period:'after'}));
+          assert.equal(good.period,'after');assert.equal(good.mgdl,108.1);assert.equal(good.verified,true);
+          assert.throws(()=>T.vk201NewValue('glucose',ctx.data.measurements[1],f({...base,glucoseValue:'6',glucoseUnit:'mmol',period:'invalid'})));
+          const bp=T.vk201NewValue('bp',ctx.data.measurements[0],f({...base,sys:'124',dia:'78',pulse:'',mealTiming:'after_breakfast'}));assert.equal(bp.sys,124);assert.equal(bp.pulse,null);assert.equal(bp.mealTiming,'after_breakfast');
+          assert.throws(()=>T.vk201NewValue('bp',ctx.data.measurements[0],f({...base,sys:'120',dia:'130',pulse:'',mealTiming:'unknown'})));
+          const w=T.vk201NewValue('weight',ctx.data.weights[0],f({...base,kg:'129,4',mealTiming:'before_breakfast'}));assert.equal(w.kg,129.4);assert.equal(w.note,'korrigiert');
+          const lab=T.vk201NewValue('lab',ctx.data.labs[0],f({...base,name:'PSA gesamt',value:'2,1',unit:'ng/ml',low:'',high:'4',place:'Labor'}));assert.equal(lab.value,2.1);assert.equal(lab.low,null);
+          const base64=Buffer.from('test pdf').toString('base64'),att={name:'befund.pdf',mime:'application/pdf',size:8,base64};assert.equal(T.vk201ValidateFile(att),true);assert.equal(T.vk201ValidateFile({...att,size:7}),false);assert.equal(T.vk201ValidateAll([att]),true);assert.equal(T.vk201ValidateAll(Array.from({length:5},()=>att)),false);
+          const form=(type,id,values)=>({dataset:{vk201Type:type,vk201Id:id},values,querySelector:()=>({disabled:false,isConnected:false}),querySelectorAll:()=>[]});
+          (async()=>{
+           const prev=ctx.data.measurements;saveThrows=true;
+           let failed=false;try{await T.vk201SaveEditor(form('glucose','g',{...base,glucoseValue:'108',glucoseUnit:'mgdl',period:'after'}))}catch(e){failed=e.message==='Speicherfehler'}
+           assert(failed);assert.strictEqual(ctx.data.measurements,prev,'Rollback bei Speicherfehler');
+           saveThrows=false;await T.vk201SaveEditor(form('glucose','g',{...base,glucoseValue:'108',glucoseUnit:'mgdl',period:'after'}));assert.equal(ctx.data.measurements[1].mgdl,108);assert.equal(ctx.data.measurements[1].period,'after');
+           await T.vk201SaveEditor(form('weight','w',{...base,kg:'127,5',mealTiming:'before_breakfast'}));assert.equal(ctx.data.weights[0].kg,127.5);assert(weightSaves>0);
+           console.log('OK: Bearbeitung & Rollback, mg/dl und mmol/l, Nüchtern-/Mahlzeitstatus, Blutdruck/Puls, Gewicht, Labor, Anhänge, feste iPhone-Darstellung, Asthma/Urologie, verschlüsselter Speicher.');
+          })().catch(e=>{console.error(e);process.exit(1)});
+          VK201TEST
+          node /tmp/vk201_test.js
+      - name: Nur getestete App-Dateien veroeffentlichen
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.js sw.js style.css version.json
+          if git diff --cached --quiet; then
+            echo 'Version 2.0.1 bereits installiert.'
+          else
+            git commit -m 'VitalKompass 2.0.1: Messwerte bearbeiten und verschluesselte Anhaenge'
+            git push origin HEAD:main
+          fi
