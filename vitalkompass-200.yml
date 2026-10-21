@@ -1,0 +1,363 @@
+name: VitalKompass 2.0.0 - Urologie und PDF-Themenberichte
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/vitalkompass-200.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vitalkompass-200-urology-report
+  cancel-in-progress: false
+
+jobs:
+  install-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - name: Quellcode laden
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: true
+      - name: Installierte Version erkennen
+        id: state
+        shell: bash
+        run: |
+          if python3 -c 'import json; raise SystemExit(0 if json.load(open("version.json",encoding="utf-8"))["version"] == "2.0.0" else 1)'; then
+            echo 'installed=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'installed=false' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Urologie und Einzelberichte sicher einbauen
+        if: steps.state.outputs.installed == 'false'
+        shell: bash
+        run: |
+          cat > /tmp/vk200_extension.js <<'VK200EXT'
+          /* VK200 MODULE BEGIN - Urologie, Nüchtern-Erklärungen und Einzel-/Sammelberichte. */
+          const VK_URO_KINDS={
+           prostate:'Prostata / gutartige Vergrößerung', prostatitis:'Prostataentzündung / Beckenschmerz', psa:'PSA-Besprechung / Vorsorge', cancer:'Prostatakrebs / Nachsorge',
+           urgency:'Starker Harndrang', frequency:'Häufiges Wasserlassen', nocturia:'Nächtliches Wasserlassen', stream:'Schwacher / unterbrochener Harnstrahl', residual:'Restharngefühl / Restharn',
+           pain:'Brennen / Schmerzen beim Wasserlassen', urine_blood:'Sichtbares Blut im Urin', infection:'Harnwegsinfekt', incontinence:'Ungewollter Urinverlust', retention:'Harnverhalt / Entleerungsstörung',
+           bladder:'Harnblase / Blasenspiegelung', kidney:'Niere / Nierenwerte', stone:'Nieren- oder Harnleiterstein', urethra:'Harnröhre', sexual:'Sexualfunktion / Erektion',
+           testis:'Hoden / Nebenhoden', exam:'Urologischer Befund / Untersuchung', therapy:'Behandlung / Medikament / Operation', other:'Sonstige Urologie'
+          };
+          const VK_IPSS_FIELDS=[
+           'Gefühl, die Blase nicht vollständig zu entleeren', 'Erneutes Wasserlassen in weniger als zwei Stunden',
+           'Unterbrechungen des Harnstrahls', 'Schwer aufschiebbarer Harndrang', 'Schwacher Harnstrahl',
+           'Pressen, um das Wasserlassen zu beginnen', 'Nächtliche Toilettengänge'
+          ];
+          const VK_REPORT_TOPICS=[
+           ['glucose','Blutzucker','Messwerte und Diagramm'],['bp','Blutdruck','Systolisch und diastolisch mit Diagramm'],['pulse','Puls','Verlauf mit Diagramm'],
+           ['weight','Körpergewicht','Gewichtstagebuch und Diagramm'],['asthma','Asthma','Symptome, Peak-Flow und FEV1-Verlauf'],['urology','Urologie & Prostata','PSA-Verlauf, IPSS und Befunde'],
+           ['labs','Laborwerte','Messwerte und Referenzangaben'],['meds','Medikamentenplan','Aktueller Medikamentenstand'],['medlog','Medikamenteneinnahmen','Dokumentierte Einnahmen'],
+           ['symptoms','Symptomtagebuch','Beschwerden und Verlauf'],['reminders','Kontrollen & Termine','Termine und Status'],['profile','Persönliche Daten','Patientenstammdaten'],
+           ['emergency','Notfallpass','Wichtige Kontaktdaten'],['prevention','Vorsorge & Notfallplan','Individuell hinterlegte Maßnahmen'],['evidence','Nachweise','Dokumentenübersicht ohne Dateianhänge'],
+           ['gdb','GdB & Teilhabe','Dokumentierte Angaben'],['analysis','Gesundheitsanalyse','Überblick und Messwertzahlen'],['pro','Analyse Pro','Erweiterte medizinische Auswertung'],['stats','Statistiken','Zusammenfassung im Zeitraum'],
+           ['benefits','Leistungen','Orientierung zu möglichen Leistungen']
+          ];
+          const VK_REPORT_KEYS=new Set(VK_REPORT_TOPICS.map(x=>x[0]));
+          function vkFastingInfo(context){
+           const head=context==='uro'?'Vorbereitung auf PSA und urologische Untersuchungen':context==='labs'?'Nüchtern zur Blutabnahme – was heißt das?':'Wann ist eine Blutzuckermessung nüchtern?';
+           const main=`<p><strong>Nüchtern-Blutzucker:</strong> Normalerweise mindestens <b>8 Stunden ohne Kalorien</b>; bei einer angeordneten Nüchtern-Blutentnahme sind häufig <b>8 bis 12 Stunden</b> vorgesehen. Wasser ist im Regelfall erlaubt. Die konkrete Anweisung der Arztpraxis geht vor.</p>
+           <p><strong>Nicht nüchtern</strong> nach Essen, Saft, Milch oder gesüßten Getränken. Für eine verlässlich vergleichbare Untersuchung am besten vorab klären, ob Kaffee, Tee, Kaugummi oder Sport vermieden werden sollen. Ein Wert „vor dem Essen“ ist nicht automatisch nüchtern, wenn vorher bereits gegessen wurde.</p>
+           <p><strong>Medikamente:</strong> Nicht eigenständig absetzen oder verschieben, besonders nicht Diabetes-Medikamente oder Insulin. Die Einnahme mit der Praxis abstimmen. „Medikament nüchtern nehmen“ hat möglicherweise eine andere Zeitvorgabe als „nüchtern zur Blutabnahme kommen“.</p>
+           <p><strong>Beispiel:</strong> Letzte kalorienhaltige Mahlzeit um 20:00 Uhr, Nüchternmessung ab 04:00 Uhr; bei einer 12-Stunden-Anweisung erst ab 08:00 Uhr. Das ist keine Empfehlung, Mahlzeiten oder Medikamente ohne ärztliche Abstimmung auszulassen.</p>`;
+           const psa=`<p><strong>PSA-Test:</strong> Für die PSA-Blutabnahme ist Nüchternsein üblicherweise nicht nötig. Samenerguss, Druck auf die Prostata (z. B. längeres Radfahren, Untersuchungen) und Harnwegs-/Prostataentzündungen können den Wert beeinflussen. Solche Umstände vor dem Test mitteilen und Vorbereitung beziehungsweise Wartezeit mit der Urologie klären.</p>
+           <p><strong>Urinprobe oder Ultraschall:</strong> Ob eine erste Morgenurinprobe, Mittelstrahlurin oder eine gefüllte Blase erforderlich ist, hängt von der konkreten Untersuchung ab. Nicht pauschal vor jedem Termin viel trinken oder nüchtern bleiben.</p>`;
+           return panel(head,`<details class="vk-fast-info" ${context==='glucose'?'open':''}><summary>Erklärung öffnen: Essen, Trinken, Medikamente und Untersuchungen</summary>${main}${psa}<p class="section-note">Quellen: <a href="https://www.gesundheitsinformation.de/was-bedeutet-nuechtern-sein.html" target="_blank" rel="noopener noreferrer">IQWiG – Nüchtern sein</a> · <a href="https://www.gesundheitsinformation.de/der-psa-test-zur-frueherkennung-von-prostatakrebs.html" target="_blank" rel="noopener noreferrer">IQWiG – PSA-Test</a>. Bei Unsicherheit immer die durchführende Praxis fragen.</p></details>`);
+          }
+          function vkUroValidate(row){
+           if(!row||typeof row.id!=='string'||row.id.length>120||!dateValid(row.date)||!timeValid(row.time)||!['entry','ipss'].includes(row.type))return false;
+           if(row.type==='ipss')return Array.isArray(row.ipss)&&row.ipss.length===7&&row.ipss.every(x=>Number.isInteger(x)&&x>=0&&x<=5)&&Number.isInteger(row.score)&&row.score===row.ipss.reduce((a,b)=>a+b,0)&&Number.isInteger(row.qol)&&row.qol>=0&&row.qol<=6;
+           return Object.prototype.hasOwnProperty.call(VK_URO_KINDS,row.kind)&&['none','mild','moderate','severe'].includes(row.severity)&&
+           (row.day===null||(Number.isInteger(row.day)&&row.day>=0&&row.day<=60))&&(row.night===null||(Number.isInteger(row.night)&&row.night>=0&&row.night<=30))&&typeof row.note==='string'&&row.note.length<=2000&&typeof row.finding==='string'&&row.finding.length<=1200;
+          }
+          function vkUroIPSSLabel(score){return score<=7?'gering':score<=19?'mittelgradig':'ausgeprägt'}
+          function vkUroIPSSChart(rows){const ipss=rows.filter(r=>r.type==='ipss').map(r=>({date:r.date,time:r.time,score:r.score}));return vkMiniTrend(ipss,'score','IPSS-Beschwerdewert','Punkte','day')}
+          function vkUroPsaChart(rows){const psa=rows.filter(x=>x.name==='PSA gesamt'&&Number.isFinite(x.value)&&x.verified===true).sort((a,b)=>a.date.localeCompare(b.date));return psa.length?vkMiniTrend(psa,'value','Gesamt-PSA','ng/ml','day'):'<p class="section-note">Noch kein bestätigter Gesamt-PSA-Laborwert vorhanden.</p>'}
+          function vkUroEntriesTable(rows,printing=false){
+           if(!rows.length)return '<p class="section-note">Noch keine urologischen Einträge erfasst.</p>';
+           return `<div class="table-wrap"><table><thead><tr><th>Datum</th><th>Thema / IPSS</th><th>Angaben / Befund</th>${printing?'':'<th>Aktion</th>'}</tr></thead><tbody>${[...rows].sort(sortdate).reverse().slice(0,150).map(r=>`<tr><td>${fmtDate(r.date)} ${h(r.time)}</td><td>${r.type==='ipss'?'IPSS '+r.score+'/35 · '+vkUroIPSSLabel(r.score):h(VK_URO_KINDS[r.kind]||r.kind)}</td><td>${r.type==='ipss'?'Lebensqualität: '+r.qol+'/6':h([r.severity==='none'?'Keine Beschwerden':r.severity==='mild'?'Leicht':r.severity==='moderate'?'Mittel':r.severity==='severe'?'Stark':'',r.day===null?'':'Tagsüber: '+r.day,r.night===null?'':'Nachts: '+r.night,r.finding||'',r.note||''].filter(Boolean).join(' · '))}</td>${printing?'':`<td><button type="button" class="secondary" data-action="edit-uro" data-id="${h(r.id)}">Bearbeiten</button> <button type="button" class="dangerbutton" data-action="remove-uro" data-id="${h(r.id)}">Löschen</button></td>`}</tr>`).join('')}</tbody></table></div>`;
+          }
+          function pageUrology(){
+           const rows=(data.urologyLogs||[]),psa=data.labs.filter(x=>x.name==='PSA gesamt'||x.name==='PSA frei'||x.name==='PSA frei/gesamt');
+           const categories=Object.entries(VK_URO_KINDS).map(([k,v])=>`<option value="${k}">${h(v)}</option>`).join('');
+           const scoreQuestions=VK_IPSS_FIELDS.map((text,i)=>`<label class="field"><span>${i+1}. ${h(text)} (letzte vier Wochen)</span><select name="i${i}" required><option value="">Bitte auswählen</option>${[0,1,2,3,4,5].map(x=>`<option value="${x}">${x} Punkte</option>`).join('')}</select></label>`).join('');
+           const summary=[['Prostata','Gutartige Prostatavergrößerung (BPH/BPS), Prostatitis, PSA-Früherkennung und Prostatakrebs-Nachsorge. PSA allein stellt keine Krebsdiagnose dar.'],
+           ['Harnblase','Häufiger Harndrang, überaktive Blase, Restharn, Inkontinenz, Blasenentzündung und Blasentumoren. Sichtbares Blut im Urin muss untersucht werden.'],
+           ['Nieren & Harnleiter','Nierensteine, Nierenfunktionswerte, Entzündungen, Abflussstörungen und Ultraschallkontrollen.'],
+           ['Harnröhre & Beckenboden','Schwacher Harnstrahl, Harnröhrenenge, Harnverhalt, Beckenbodenprobleme und chronische Beckenschmerzen.'],
+           ['Männergesundheit','Hoden, Nebenhoden, Erektionsprobleme, Fertilität, Hormone und Beschwerden nach Eingriffen.'],
+           ['Urologische Untersuchungen','Urinstatus und Urinkultur, PSA / freies PSA, Tastuntersuchung, Sonografie, Restharn, Harnstrahlmessung, MRT, ggf. Biopsie oder Blasenspiegelung.'],
+           ['Behandlung','Verlaufsbeobachtung, Medikamente (z. B. Alpha-Blocker oder 5-alpha-Reduktase-Hemmer), Beckenbodentraining und operative Verfahren – je nach ärztlicher Diagnose.']];
+           return tag('Urologie & Prostata','Prostata, Harnblase, Nieren, Harnwege, Beschwerden und ärztliche Befunde – alles im lokalen Gesundheitsjournal.')+
+           `<div class="notice danger"><strong>Sofort Hilfe holen:</strong> Bei plötzlich vollständigem Harnverhalt, starken Flankenschmerzen mit Fieber/Schüttelfrost oder starken akuten Hodenschmerzen rasch notfallmedizinisch abklären lassen. Bei schwerer akuter Erkrankung 112.</div>`+
+           panel('Urologische Themen – erklärt',`<div class="vk-uro-topics">${summary.map(([title,desc])=>`<details><summary>${h(title)}</summary><p>${h(desc)}</p></details>`).join('')}</div><p class="section-note">Alle Informationen dienen der Orientierung. Kein einzelner PSA-Wert, IPSS-Wert oder Symptom reicht für eine Diagnose.</p>`)+
+           vkFastingInfo('uro')+pagePSAFast()+
+           panel('PSA-Werte und Verlauf',`<p>PSA-Werte kommen automatisch aus „Laborwerte“ und werden nicht doppelt gespeichert.</p>${vkUroPsaChart(psa)}${psa.length?`<div class="table-wrap"><table><thead><tr><th>Datum</th><th>Laborwert</th><th>Wert</th></tr></thead><tbody>${[...psa].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,40).map(r=>`<tr><td>${fmtDate(r.date)}</td><td>${h(r.name)}</td><td>${labLabel(r)}</td></tr>`).join('')}</tbody></table></div>`:'<p>Noch keine PSA-Werte vorhanden.</p>'}`)+
+           panel('Beschwerden / Befunde eintragen',`<form id="uro-log-form"><input type="hidden" name="id"><div class="form-grid"><label class="field"><span>Datum</span><input type="date" name="date" value="${today()}" required></label><label class="field"><span>Uhrzeit</span><input type="time" name="time" value="${nowTime()}" required></label><label class="field"><span>Bereich / Thema</span><select name="kind" required>${categories}</select></label><label class="field"><span>Beschwerdestärke</span><select name="severity"><option value="none">Keine Beschwerden / nur Befund</option><option value="mild">Leicht</option><option value="moderate">Mittel</option><option value="severe">Stark</option></select></label><label class="field"><span>Wasserlassen tagsüber (optional)</span><input type="number" name="day" min="0" max="60" step="1" placeholder="Anzahl"></label><label class="field"><span>Nachts (optional)</span><input type="number" name="night" min="0" max="30" step="1" placeholder="Anzahl"></label></div><label class="field"><span>Untersuchung / ärztlicher Befund (optional)</span><textarea name="finding" rows="2" maxlength="1200" placeholder="z. B. Ultraschall, Restharn, Harnstrahlmessung, Diagnosen aus Befunden"></textarea></label><label class="field"><span>Eigene Notizen, Auslöser, Behandlung (optional)</span><textarea name="note" rows="3" maxlength="2000"></textarea></label><button class="primary" type="submit">Urologischen Eintrag verschlüsselt speichern</button></form>`)+
+           panel('IPSS – Beschwerden beim Wasserlassen',`<p>Sieben Fragen für die <strong>letzten vier Wochen</strong> ergeben 0–35 Punkte (0–7 gering, 8–19 mittelgradig, 20–35 ausgeprägt). Die Lebensqualität wird getrennt bewertet. Der IPSS beschreibt Symptome, nicht deren Ursache.</p><form id="uro-ipss-form"><input name="id" type="hidden"><div class="form-grid"><label class="field"><span>Datum</span><input type="date" name="date" value="${today()}" required></label><label class="field"><span>Uhrzeit</span><input type="time" name="time" value="${nowTime()}" required></label>${scoreQuestions}<label class="field"><span>Belastung der Lebensqualität durch Beschwerden (0 = sehr zufrieden, 6 = sehr unzufrieden)</span><select name="qol" required><option value="">Bitte auswählen</option>${[0,1,2,3,4,5,6].map(v=>`<option value="${v}">${v}</option>`).join('')}</select></label></div><button type="submit" class="primary">IPSS-Auswertung speichern</button></form>${vkUroIPSSChart(rows)}`)+
+           panel(`Urologisches Tagebuch (${rows.length})`,vkUroEntriesTable(rows));
+          }
+          function pageReportPlus(){
+           const groups=VK_REPORT_TOPICS.map(([k,label,desc])=>`<div class="vk-report-topic"><label><input type="checkbox" name="part" value="${k}" ${reportChoice[k]?'checked':''}><span><strong>${h(label)}</strong><small>${h(desc)}</small></span></label><button type="button" data-action="print-topic" data-topic="${k}" class="secondary">Nur dieses Thema als PDF</button></div>`).join('');
+           return tag('Berichte – einzeln oder gemeinsam','Alle Bereiche auswählen und jeweils mit passenden Diagrammen oder Tabellen als PDF speichern und ausdrucken.')+
+           panel('Themenauswahl und Zeitraum',`<form id="doctor-report-form"><div class="form-grid"><label class="field"><span>Zeitraum von</span><input name="from" type="date" value="${rangeDays(30)}" required></label><label class="field"><span>Zeitraum bis</span><input name="to" type="date" value="${today()}" required></label></div><div class="actions"><button type="button" data-action="report-all" class="secondary">Alle Themen auswählen</button><button type="button" data-action="report-none" class="secondary">Auswahl aufheben</button></div><div class="vk-report-list">${groups}</div><button class="primary" type="submit">Ausgewählte Themen als PDF erstellen</button></form><p class="section-note">Jede Zeile hat einen separaten PDF-Knopf. Messwertdiagramme werden direkt in der lokal erstellten PDF gezeichnet. PDFs sind nach dem Export <strong>nicht verschlüsselt</strong>: nur sicher speichern oder gezielt teilen.</p>`);
+          }
+          function vkReportDateRange(form){const f=form?new FormData(form):null,from=String(f?.get('from')||rangeDays(30)),to=String(f?.get('to')||today());if(!dateValid(from)||!dateValid(to)||from>to||to>today())throw Error('Bitte einen gültigen Berichtszeitraum bis heute wählen.');return [from,to]}
+          function vkReportTable(headings,rows){if(!rows.length)return '<p>Für den Zeitraum keine Einträge vorhanden.</p>';return `<div class="table-wrap"><table><thead><tr>${headings.map(t=>`<th>${h(t)}</th>`).join('')}</tr></thead><tbody>${rows.slice(-140).map(items=>`<tr>${items.map(x=>`<td>${h(x??'')}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`}
+          function vkAllTopicHtml(from,to,choice){
+           const r=vkDocRows(from,to),sel=k=>choice[k]===true,name=h(data.profile.name||'Nicht angegeben'),period='day';
+           const ur=(data.urologyLogs||[]).filter(x=>between(x,from,to)),labs=(data.labs||[]).filter(x=>between(x,from,to));
+           let out=`<h2>Gesundheitsbericht · ${name}</h2><p>Dokumentierter Zeitraum: ${fmtDate(from)} bis ${fmtDate(to)}. Die Diagramme zeigen dokumentierte Messungen; fehlende Werte bedeuten nicht Beschwerdefreiheit. Keine Diagnose.</p>`;
+           if(sel('glucose')){const q=vkStats(r.glucose,'mgdl');out+=`<h3>Blutzucker</h3><p>${q.n} bestätigte Messungen · Mittel ${nf(q.mean,1)} mg/dl · Minimum ${nf(q.min,1)} · Maximum ${nf(q.max,1)}. Nüchtern ist nicht gleich „vor jeder Mahlzeit“.</p>${lineChart('glucose',period,700,r.glucose)}${vkReportTable(['Datum','Wert','Situation'],r.glucose.map(x=>[fmtDate(x.date)+' '+x.time,nf(x.mgdl,1)+' mg/dl',gLabels[x.period]||'Sonstige']))}`}
+           if(sel('bp')){const q=vkStats(r.bp,'sys');out+=`<h3>Blutdruck</h3><p>${q.n} bestätigte Messungen · Systolisch im Mittel ${nf(q.mean,1)} mmHg.</p>${lineChart('bp',period,700,r.bp)}${vkReportTable(['Datum','Blutdruck','Puls'],r.bp.map(x=>[fmtDate(x.date)+' '+x.time,nf(x.sys)+'/'+nf(x.dia)+' mmHg',Number.isFinite(x.pulse)?nf(x.pulse)+'/min':'–']))}`}
+           if(sel('pulse')){const p=r.bp.filter(x=>Number.isFinite(x.pulse));out+=`<h3>Puls</h3>${vkMiniTrend(p,'pulse','Puls','/min',period)}${vkReportTable(['Datum','Puls'],p.map(x=>[fmtDate(x.date)+' '+x.time,nf(x.pulse)+'/min']))}`}
+           if(sel('weight')){const q=vkStats(r.weight,'kg');out+=`<h3>Körpergewicht</h3><p>${q.n} Einträge · Mittel ${nf(q.mean,1)} kg · Minimum ${nf(q.min,1)} · Maximum ${nf(q.max,1)}.</p>${weightChart(period,r.weight,700,'all')}${vkReportTable(['Datum','Gewicht','Messzeitpunkt'],r.weight.map(x=>[fmtDate(x.date)+' '+x.time,nf(x.kg,1)+' kg',bpMealLabels[x.mealTiming]||'']))}`}
+           if(sel('asthma')){out+=`<h3>Asthma-Dokumentation</h3>${vkMiniTrend(r.asthma,'peakFlow','Peak-Flow','l/min',period)}${vkMiniTrend(r.asthma,'fev1Pct','FEV1','%',period)}${vkAsthmaStats(r.asthma)}${vkReportTable(['Datum','Atemnot','Bedarfsanwendungen'],r.asthma.map(x=>[fmtDate(x.date)+' '+x.time,x.breathlessness+'/10',x.rescueUses]))}`}
+           if(sel('urology')){const psa=labs.filter(x=>x.name==='PSA gesamt'&&x.verified===true);out+=`<h3>Urologie & Prostata</h3><p>PSA-Verlauf und dokumentierte urologische Beschwerden/Befunde. PSA ist kein Krebsnachweis, IPSS keine Diagnose.</p>${vkUroPsaChart(psa)}${vkUroIPSSChart(ur)}${vkUroEntriesTable(ur,true)}${vkReportTable(['Datum','PSA / Urinwert','Wert'],labs.filter(x=>/PSA|Testosteron|Kreatinin \(Urin\)|Albumin \(Urin\)|Urinstatus|Urin-Albumin|Urinkultur/.test(x.name)).map(x=>[fmtDate(x.date),x.name,nf(x.value,3)+' '+(x.unit||'')]))}`}
+           if(sel('labs')){out+=`<h3>Laborwerte</h3>${vkReportTable(['Datum','Parameter','Wert'],r.labs.map(x=>[fmtDate(x.date),x.name,nf(x.value,3)+' '+(x.unit||'')]))}`}
+           if(sel('meds'))out+=`<h3>Medikamente – aktueller dokumentierter Stand</h3>${vkReportTable(['Medikament','Dosierung','Einnahmeplan'],data.meds.map(x=>[x.name,x.dose||'',x.schedule||'']))}`;
+           if(sel('medlog'))out+=`<h3>Dokumentierte Medikamenteneinnahmen</h3>${vkReportTable(['Datum','Medikament','Menge'],(data.medTakes||[]).filter(x=>between(x,from,to)).map(x=>[fmtDate(x.date)+' '+x.time,data.meds.find(m=>m.id===x.medId)?.name||'Unbekannt',x.dose||'']))}`;
+           if(sel('symptoms'))out+=`<h3>Symptomtagebuch</h3>${vkReportTable(['Datum','Symptom','Schwere'],(data.symptoms||[]).filter(x=>between(x,from,to)).map(x=>[fmtDate(x.date)+' '+x.time,x.kind,x.severity]))}`;
+           if(sel('reminders'))out+=`<h3>Kontrollen und Termine</h3>${vkReportTable(['Datum','Art','Stand'],(data.reminders||[]).filter(x=>between(x,from,to)).map(x=>[fmtDate(x.date),x.kind,x.done?'Erledigt':'Offen']))}`;
+           if(sel('profile'))out+=`<h3>Persönliche Daten</h3><p>Name: ${h(data.profile.name||'–')} · Geburtsdatum: ${h(data.profile.birthday||'–')} · Größe: ${h(data.profile.height||'–')} cm. Weitere Profildaten nur gezielt weitergeben.</p>`;
+           if(sel('emergency'))out+=`<h3>Notfallpass</h3><p>Erkrankungen: ${h((data.profile.conditions||[]).join(', '))} · Allergien: ${h((data.profile.allergies||[]).join(', '))} · Notfallkontakte: ${h((data.profile.contact||[]).map(x=>x.name+' '+x.phone).join('; '))}</p>`;
+           if(sel('prevention')){const e=data.checks?.emergencyPlan||{};out+=`<h3>Vorsorge & Notfallplan</h3><p>Ärztlich vereinbarte Maßnahmen: ${h(e.actions||'Keine Angaben')} · Hinweise: ${h(e.doctorNotes||'Keine Angaben')}</p>`}
+           if(sel('evidence'))out+=`<h3>Nachweise (nur Metadaten, keine Dateianhänge)</h3>${vkReportTable(['Datum','Art','Notiz'],(data.evidence||[]).filter(x=>between(x,from,to)).map(x=>[fmtDate(x.date),x.kind,x.notes||'']))}`;
+           if(sel('gdb')){const g=data.checks?.gdb||{};out+=`<h3>GdB und Teilhabe</h3><p>Vorhandener GdB: ${h(g.value??'nicht eingetragen')} · Gleichstellung: ${h(g.equalization||'nicht angegeben')}. Individuelle rechtliche Prüfung erforderlich.</p>`}
+           if(sel('analysis'))out+=`<h3>Gesundheitsanalyse</h3><p>Im Zeitraum ${r.glucose.length} bestätigte Blutzuckerwerte, ${r.bp.length} Blutdruckwerte, ${r.weight.length} Gewichtseinträge, ${r.asthma.length} Asthmaeinträge und ${r.labs.length} bestätigte Laborwerte.</p>`;
+           if(sel('pro'))out+='<h3>Analyse Pro</h3>'+proReportHtml();
+           if(sel('stats'))out+=`<h3>Statistiken im Berichtszeitraum</h3><p>Blutzucker: Mittel ${nf(vkStats(r.glucose,'mgdl').mean,1)} mg/dl · Blutdruck systolisch: Mittel ${nf(vkStats(r.bp,'sys').mean,1)} mmHg · Gewicht: Mittel ${nf(vkStats(r.weight,'kg').mean,1)} kg.</p>`;
+           if(sel('benefits'))out+=`<h3>Krankenkasse & Leistungen</h3><p>Ansprüche sind abhängig von Befunden, Versicherungsstatus und konkreten Voraussetzungen. Für individuelle Anträge die offiziellen Stellen oder die Krankenkasse kontaktieren. Diese PDF enthält keine Leistungszusage.</p>`;
+           return out+'<p>Vertraulich: PDF-Dateien sind nicht automatisch verschlüsselt. Bericht ist eine selbst erfasste Dokumentation und ersetzt keine ärztliche Beurteilung.</p>';
+          }
+          /* VK200 MODULE END */
+          VK200EXT
+          cat > /tmp/vk200_submit.js <<'VK200SUB'
+          /* VK200 FORM SAVE BEGIN */
+          if(form.getAttribute('id')==='uro-log-form'){
+           const entryId=String(f.get('id')||''), date=String(f.get('date')||''),time=String(f.get('time')||''),kind=String(f.get('kind')||''),severity=String(f.get('severity')||'');
+           const rawDay=String(f.get('day')||'').trim(),rawNight=String(f.get('night')||'').trim();
+           const day=rawDay===''?null:nval(rawDay),night=rawNight===''?null:nval(rawNight);
+           const entry={id:entryId||id(),type:'entry',date,time,kind,severity,day,night,finding:String(f.get('finding')||'').slice(0,1200),note:String(f.get('note')||'').slice(0,2000)};
+           if(date>today()||!vkUroValidate(entry))throw Error('Bitte die urologischen Angaben, das Datum und die Zählwerte überprüfen.');
+           const before=data.urologyLogs,at=before.findIndex(x=>x.id===entryId);
+           if(entryId&&at<0)throw Error('Zu bearbeitender Eintrag nicht gefunden.');
+           data.urologyLogs=before.map(x=>({...x}));if(at<0)data.urologyLogs.push(entry);else data.urologyLogs[at]=entry;
+           try{await save()}catch(e){data.urologyLogs=before;throw e}
+           renderMain();toast('Urologischer Eintrag lokal verschlüsselt gespeichert.');return;
+          }
+          if(form.getAttribute('id')==='uro-ipss-form'){
+           const entryId=String(f.get('id')||''),date=String(f.get('date')||''),time=String(f.get('time')||'');
+           const vals=Array.from({length:7},(_,i)=>String(f.get('i'+i)||'')).map(s=>s===''?NaN:Number(s));
+           const qolText=String(f.get('qol')||''),qol=qolText===''?NaN:Number(qolText);
+           const entry={id:entryId||id(),type:'ipss',date,time,ipss:vals,score:vals.reduce((a,b)=>a+b,0),qol};
+           if(date>today()||!vkUroValidate(entry))throw Error('Bitte alle sieben IPSS-Fragen und die Lebensqualität beantworten.');
+           const before=data.urologyLogs,at=before.findIndex(x=>x.id===entryId);
+           if(entryId&&at<0)throw Error('Die bisherige IPSS-Auswertung wurde nicht gefunden.');
+           data.urologyLogs=before.map(x=>({...x}));if(at<0)data.urologyLogs.push(entry);else data.urologyLogs[at]=entry;
+           try{await save()}catch(e){data.urologyLogs=before;throw e}
+           renderMain();toast('IPSS '+entry.score+'/35 ('+vkUroIPSSLabel(entry.score)+') gespeichert. Keine Diagnose.');return;
+          }
+          /* VK200 FORM SAVE END */
+          VK200SUB
+          cat > /tmp/vk200_actions.js <<'VK200ACT'
+          /* VK200 ACTION BEGIN */
+          if(action==='report-all'||action==='report-none'){
+           const form=$('#doctor-report-form');if(form)form.querySelectorAll('input[name="part"]').forEach(el=>{el.checked=action==='report-all'});return;
+          }
+          if(action==='print-topic'){
+           const topic=String(el.dataset.topic||'');if(!VK_REPORT_KEYS.has(topic))throw Error('Berichtsthema nicht bekannt.');
+           if(weightSaveInProgress)throw Error('Eine Gewichtsspeicherung läuft noch. Bitte warten.');
+           const [from,to]=vkReportDateRange($('#doctor-report-form'));
+           makePrint('Einzelbericht – '+(VK_REPORT_TOPICS.find(t=>t[0]===topic)?.[1]||topic),vkAllTopicHtml(from,to,{[topic]:true}));return;
+          }
+          if(action==='edit-uro'){
+           const entry=(data.urologyLogs||[]).find(x=>x.id===el.dataset.id);if(!entry)return;
+           const form=$('#'+(entry.type==='ipss'?'uro-ipss-form':'uro-log-form'));if(!form)return;
+           for(const name of ['id','date','time'])form.elements[name].value=entry[name];
+           if(entry.type==='ipss'){entry.ipss.forEach((v,i)=>{form.elements['i'+i].value=String(v)});form.elements.qol.value=String(entry.qol)}
+           else{for(const name of ['kind','severity','day','night','finding','note'])form.elements[name].value=entry[name]??''}
+           form.scrollIntoView({behavior:'smooth',block:'start'});return;
+          }
+          if(action==='remove-uro'){
+           if(weightSaveInProgress)throw Error('Eine Gewichtsmessung wird noch gespeichert. Bitte warten.');
+           if(!confirm('Diesen urologischen Eintrag endgültig löschen?'))return;
+           const before=data.urologyLogs,next=before.filter(x=>x.id!==el.dataset.id);
+           if(next.length===before.length)throw Error('Eintrag nicht gefunden.');
+           data.urologyLogs=next;
+           try{await save()}catch(e){data.urologyLogs=before;throw e}
+           renderMain();toast('Urologischer Eintrag gelöscht.');return;
+          }
+          /* VK200 ACTION END */
+          VK200ACT
+          cat > /tmp/vk200_style.css <<'VK200CSS'
+          
+          /* VitalKompass 2.0.0: gut erkennbare Urologie- und Arztbericht-Karten. */
+          .vk-uro-topics{display:grid;gap:9px}
+          .vk-uro-topics details,.vk-fast-info{border:1px solid #bfd7e5;border-radius:12px;padding:12px 14px;background:#f6fbff}
+          .vk-uro-topics summary,.vk-fast-info summary{cursor:pointer;font-weight:750;color:#214c75;min-height:30px}
+          .vk-uro-topics p,.vk-fast-info p{margin:10px 0;line-height:1.55}
+          .vk-report-list{display:grid;gap:11px;margin:17px 0}
+          .vk-report-topic{display:flex;align-items:center;justify-content:space-between;gap:13px;background:#f8fcff;border:1.5px solid #c5dce9;border-radius:14px;padding:13px}
+          .vk-report-topic label{display:flex;align-items:center;gap:12px;flex:1;min-width:0;cursor:pointer}
+          .vk-report-topic input[type="checkbox"]{flex:none;width:23px;height:23px;min-width:23px;accent-color:#176cac}
+          .vk-report-topic strong{display:block;color:#173e62}
+          .vk-report-topic small{display:block;font-size:.85rem;color:#506b80;line-height:1.45}
+          .vk-report-topic button{min-height:46px;white-space:normal;flex:none}
+          @media screen and (max-width:700px){.vk-report-topic{flex-direction:column;align-items:stretch}.vk-report-topic label{min-height:45px}.vk-report-topic button{width:100%;min-height:49px}}
+          @media print{.vk-report-topic button{display:none}}
+          VK200CSS
+          cat > /tmp/vk200_patch.py <<'VK200PATCH'
+          #!/usr/bin/env python3
+          """Single-shot conservative build for VitalKompass 2.0.0. GitHub Actions only."""
+          from pathlib import Path
+          import json, hashlib
+          EXPECTED={
+           'app.js':'884efd8c56c0574ef380ff201e9e55e44b799641',
+           'sw.js':'5765657b8fe5765dee0389bb53710ab4ae35792f',
+           'style.css':'b9f45eac3eef3098a49878bec8adffafa8c3c7ce',
+           'version.json':'2d448a40775aea56eb384064ce5e36cd4dfb1ca0'
+          }
+          def read(path):
+           raw=Path(path).read_bytes()
+           sha=hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest()
+           if sha!=EXPECTED[path]:raise RuntimeError(f'{path}: unerwarteter Quellcode-Stand {sha} (erwartet {EXPECTED[path]}), sicherer Abbruch')
+           return raw.decode('utf-8')
+          def once(s,old,new):
+           count=s.count(old)
+           if count!=1:raise RuntimeError(f'Erwartete 1 Fundstelle für {old[:95]!r}, gefunden {count}; sicherer Abbruch')
+           return s.replace(old,new,1)
+          a=read('app.js');sw=read('sw.js');css=read('style.css');ver=read('version.json')
+          # Version and migrate existing local data safely.
+          a=once(a,"const VERSION='1.9.8'","const VERSION='2.0.0'")
+          a=once(a,"weights:[],asthmaLogs:[],medStocks:","weights:[],asthmaLogs:[],urologyLogs:[],medStocks:")
+          a=once(a,"['symptoms','medTakes','reminders','evidence','weights','asthmaLogs'])if(!Array.isArray(data[field]))", "['symptoms','medTakes','reminders','evidence','weights','asthmaLogs','urologyLogs'])if(!Array.isArray(data[field]))")
+          # Backup validation accepts old files without urology, checks new entries against strict field/range caps.
+          a=once(a," const basic=defaults().profile;for(const [field,empty] of Object.entries(basic)){", " if(x.urologyLogs!==undefined&&(!Array.isArray(x.urologyLogs)||x.urologyLogs.length>50000||!x.urologyLogs.every(vkUroValidate)))throw Error('Backup enthält ungültige urologische Einträge.');\n const basic=defaults().profile;for(const [field,empty] of Object.entries(basic)){")
+          # Navigation and page mapping.
+          a=once(a,"['weight','Körpergewicht','⚖'],['asthma','Asthma-Tagebuch','♧']", "['weight','Körpergewicht','⚖'],['urology','Urologie & Prostata','◈'],['asthma','Asthma-Tagebuch','♧']")
+          a=once(a,"weight:pageWeight,asthma:pageAsthma,doctor:pageDoctorReport", "weight:pageWeight,urology:pageUrology,asthma:pageAsthma,doctor:pageReportPlus")
+          # Fasting explanations, with source links, placed in the existing measurement modules.
+          a=once(a,"+photoNote() +panel('Accu-Chek Instant", "+photoNote()+vkFastingInfo('glucose')+panel('Accu-Chek Instant")
+          a=once(a,"tag('Laborwerte','Umfangreicher Labor-Katalog mit Diabetes-, PSA-/Prostata-, Eisen-, Nieren-, Leber- und weiteren Werten.')+warningBox", "tag('Laborwerte','Umfangreicher Labor-Katalog mit Diabetes-, PSA-/Prostata-, Eisen-, Nieren-, Leber- und weiteren Werten.')+vkFastingInfo('labs')+warningBox")
+          # One independent module; no third-party libraries or network access.
+          extension=Path('/tmp/vk200_extension.js').read_text(encoding='utf-8')
+          a=once(a,'function pageDoctorReport(){', extension+'\nfunction pageDoctorReport(){')
+          # Save urology documents using the same locally encrypted vault, with rollback on failure.
+          submit=Path('/tmp/vk200_submit.js').read_text(encoding='utf-8')
+          a=once(a,"if(form.getAttribute('id')==='doctor-report-form'){",submit+"\nif(form.getAttribute('id')==='doctor-report-form'){")
+          a=once(a,"const from=String(f.get('from')||''),to=String(f.get('to')||''),parts=f.getAll('part').map(String);const allowed=['bp','glucose','weight','asthma','labs','meds'];", "const [from,to]=vkReportDateRange(form),parts=f.getAll('part').map(String);const allowed=VK_REPORT_TOPICS.map(x=>x[0]);")
+          a=once(a,"makePrint('Individueller Arztbericht',vkDoctorHtml(from,to,reportChoice));return;", "makePrint('Individueller Arztbericht',vkAllTopicHtml(from,to,reportChoice));return;")
+          # Print one specific topic directly, select/deselect all, edit/delete urology safely.
+          actions=Path('/tmp/vk200_actions.js').read_text(encoding='utf-8')
+          a=once(a,'async function doAction(el){const action=el.dataset.action;try{\n', 'async function doAction(el){const action=el.dataset.action;try{\n'+actions+'\n')
+          # Bump offline assets & exposed version without changing the private database or password model.
+          sw=once(sw,'VitalKompass 1.9.8: fixed iPhone viewport','VitalKompass 2.0.0: urology and flexible PDF exports')
+          sw=once(sw,"vital-kompass-1.9.8-fixed-view","vital-kompass-2.0.0-urology-reports")
+          css+='\n'+Path('/tmp/vk200_style.css').read_text(encoding='utf-8')
+          version={'version':'2.0.0','released':'2026-10-21','notes':'Urologie und Prostata mit eigenem verschlüsselten Tagebuch, PSA-Verlauf, IPSS, Untersuchungsinformationen und Nüchtern-Erklärungen. Alle Gesundheitsthemen einzeln oder gemeinsam als PDF, Messwertdiagramme inklusive. Bestehende Daten und feste iPhone-Ansicht bleiben erhalten.'}
+          for path,contents in [('app.js',a),('sw.js',sw),('style.css',css),('version.json',json.dumps(version,ensure_ascii=False,indent=2)+'\n')]:
+           Path(path).write_text(contents,encoding='utf-8')
+          print('Geprüfte Aktualisierung erstellt: '+str({x:Path(x).stat().st_size for x in ['app.js','sw.js','style.css','version.json']}))
+          VK200PATCH
+          python3 /tmp/vk200_patch.py
+      - name: Syntax und Datenintegrität prüfen
+        shell: bash
+        run: |
+          node --check app.js
+          node --check sw.js
+          node --check pdf-export.js
+          python3 -m json.tool version.json > /dev/null
+          cat > /tmp/vk200_test.js <<'VK200TEST'
+          'use strict';
+          const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+          const app=fs.readFileSync('app.js','utf8');
+          const version=JSON.parse(fs.readFileSync('version.json','utf8'));
+          const pdf=fs.readFileSync('pdf-export.js','utf8'),html=fs.readFileSync('index.html','utf8');
+          assert.equal(version.version,'2.0.0');
+          assert(app.includes("const VERSION='2.0.0'"));
+          assert(app.includes("const DB='vitalkompass-secure-v1'")||app.includes("DB='vitalkompass-secure-v1'"));
+          assert(html.includes('user-scalable=no'),'Feste iPhone-Darstellung fehlt');
+          assert(app.includes('VK198 FIXED_VIEW_BEGIN'),'Bestehende Zoomsperre fehlt');
+          assert(app.includes("VK_URO_KINDS"));
+          assert(app.includes("urologyLogs:[]"));
+          assert(app.includes("'urologyLogs']if")===false);
+          assert(app.includes("'urologyLogs'])if"));
+          assert(app.includes(".urologyLogs.every(vkUroValidate)"));
+          assert(app.includes("urology:pageUrology"));
+          assert(app.includes("doctor:pageReportPlus"));
+          assert(app.includes("vkFastingInfo('glucose')"));
+          assert(app.includes("vkFastingInfo('labs')"));
+          assert(app.includes("lineChart('glucose',period,700,r.glucose)"));
+          assert(app.includes("lineChart('bp',period,700,r.bp)"));
+          assert(app.includes("weightChart(period,r.weight,700,'all')"));
+          assert(app.includes("vkUroPsaChart(psa)"));
+          assert(app.includes("data-action=\"print-topic\""));
+          assert(pdf.includes('function drawChart(svgMarkup)'),'PDF muss SVG zeichnen');
+          assert(pdf.includes("if(t==='polyline')"),'PDF muss durchgezogene Linien zeichnen');
+          const begin='/* VK200 MODULE BEGIN',end='/* VK200 MODULE END */';
+          assert(app.indexOf(begin)>0 && app.indexOf(end)>app.indexOf(begin));
+          const ext=app.slice(app.indexOf(begin),app.indexOf(end)+end.length);
+          const today='2026-10-21';
+          const fakeSvg=()=>'<div class="chartwrap"><svg viewBox="0 0 400 200"><polyline points="0,0 1,1"/></svg></div>';
+          const rows={
+           bp:[{date:'2026-10-20',time:'07:00',sys:123,dia:78,pulse:66}],
+           glucose:[{date:'2026-10-20',time:'07:05',mgdl:96,period:'fasting'}],
+           weight:[{date:'2026-10-20',time:'07:15',kg:130.5,mealTiming:'before_breakfast'}],
+           asthma:[],labs:[]
+          };
+          const ctx={
+           console, today:()=>today, dateValid:s=>/^\d{4}-\d{2}-\d{2}$/.test(s),timeValid:s=>/^\d\d:\d\d$/.test(s),
+           h:s=>String(s??''),panel:(title,body)=>`<h2>${title}</h2>${body}`,tag:(title,desc)=>`<h1>${title}</h1><p>${desc}</p>`,
+           pagePSAFast:()=>'',vkMiniTrend:()=>fakeSvg(),lineChart:()=>fakeSvg(),weightChart:()=>fakeSvg(),
+           vkDocRows:()=>rows,vkStats:(a,key)=>({n:a.length,mean:a.length?a.reduce((n,x)=>n+x[key],0)/a.length:NaN,min:a.length?Math.min(...a.map(x=>x[key])):NaN,max:a.length?Math.max(...a.map(x=>x[key])):NaN}),
+           fmtDate:s=>s,nf:n=>Number.isFinite(n)?String(n):'–',gLabels:{fasting:'Nüchtern'},bpMealLabels:{before_breakfast:'Vor dem Frühstück'},
+           between:(x,from,to)=>x.date>=from&&x.date<=to,
+           data:{profile:{name:'Test',birthday:'',height:'',conditions:[],allergies:[],contact:[]},urologyLogs:[{id:'u',type:'ipss',date:'2026-10-20',time:'10:00',ipss:[1,1,1,1,1,1,1],score:7,qol:1}],labs:[{name:'PSA gesamt',date:'2026-10-20',value:1.1,verified:true,unit:'ng/ml'}],meds:[],medTakes:[],symptoms:[],reminders:[],evidence:[],checks:{}},
+           reportChoice:{weight:true},rangeDays:()=> '2026-09-21',VK_REPORT_KEYS:null
+          };
+          vm.runInNewContext(ext+'\nglobalThis.vk200={vkUroValidate,vkAllTopicHtml,vkFastingInfo,VK_REPORT_TOPICS,VK_REPORT_KEYS,vkUroIPSSLabel};',ctx);
+          const T=ctx.vk200;
+          assert(T.VK_REPORT_TOPICS.length>=18);
+          assert.equal(new Set(T.VK_REPORT_TOPICS.map(x=>x[0])).size,T.VK_REPORT_TOPICS.length);
+          assert(T.VK_REPORT_KEYS.has('urology'));
+          const example={id:'a',type:'entry',date:'2026-10-20',time:'07:15',kind:'prostate',severity:'mild',day:6,night:2,note:'',finding:''};
+          assert.equal(T.vkUroValidate(example),true);
+          assert.equal(T.vkUroValidate({...example,night:31}),false);
+          assert.equal(T.vkUroValidate({...example,kind:'unbekannt'}),false);
+          assert.equal(T.vkUroValidate({...example,date:'fehler'}),false);
+          const ipss={id:'b',type:'ipss',date:'2026-10-20',time:'09:01',ipss:[1,2,3,4,5,0,1],score:16,qol:4};
+          assert.equal(T.vkUroValidate(ipss),true);
+          assert.equal(T.vkUroValidate({...ipss,score:15}),false);
+          assert.equal(T.vkUroValidate({...ipss,ipss:[1,2,3,4,5,6,1],score:22}),false);
+          assert.equal(T.vkUroIPSSLabel(7),'gering');assert.equal(T.vkUroIPSSLabel(8),'mittelgradig');assert.equal(T.vkUroIPSSLabel(20),'ausgeprägt');
+          const fasting=T.vkFastingInfo('glucose');
+          assert(fasting.includes('mindestens <b>8 Stunden')&&fasting.includes('PSA')&&fasting.includes('Medikamente'));
+          const combined=T.vkAllTopicHtml('2026-10-19','2026-10-21',{glucose:true,bp:true,weight:true,urology:true});
+          assert(combined.includes('Blutzucker')&&combined.includes('Blutdruck')&&combined.includes('Körpergewicht')&&combined.includes('Urologie'));
+          assert((combined.match(/class="chartwrap"/g)||[]).length>=5,'Einzelbereiche müssen SVG-Kurven besitzen');
+          const single=T.vkAllTopicHtml('2026-10-19','2026-10-21',{glucose:true});
+          assert(single.includes('Blutzucker')&&!single.includes('<h3>Blutdruck</h3>')&&!single.includes('<h3>Körpergewicht</h3>'));
+          console.log('OK: 2.0.0, feste iPhone-Ansicht, Alt-Backup-Migration, Urologie/IPSS, Nüchterninfo, einzeln/kombinierte PDF-Berichte mit Diagrammen, lokal ohne Cloud.');
+          VK200TEST
+          node /tmp/vk200_test.js
+      - name: Geprüfte Version veröffentlichen
+        if: steps.state.outputs.installed == 'false'
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.js sw.js style.css version.json
+          if git diff --cached --quiet; then
+            echo 'Keine neue Änderung.'
+          else
+            git commit -m 'VitalKompass 2.0.0: Urologie, Nuechterninfo und PDF-Themenberichte'
+            git push origin HEAD:main
+          fi
