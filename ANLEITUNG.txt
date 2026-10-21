@@ -1,14 +1,22 @@
-VitalKompass 2.0.0 – Update für iPhone
+VitalKompass 2.0.0 – Reparatur eines automatischen GitHub-Tests
 
-1. Nur die Datei vitalkompass-200.yml bei GitHub in folgendem Pfad ablegen:
-   .github/workflows/vitalkompass-200.yml
-2. Commit changes bestätigen.
-3. Unter Actions den Lauf "VitalKompass 2.0.0 - Urologie und PDF-Themenberichte" prüfen.
-4. Nach erfolgreicher Pages-Veröffentlichung die Webapp öffnen und Version 2.0.0 kontrollieren.
+Ausgangslage: Version 1.9.8 bleibt aktiv. Der erste 2.0.0-Versuch hat die neue
+App NICHT veröffentlicht. Ein Test-Hilfswert (sortdate) fehlte nur in der
+Testumgebung, nicht in der App.
 
-Falls GitHub die YAML-Datei ins Hauptverzeichnis hochlädt, oben den Dateinamen in
-.github/workflows/vitalkompass-200.yml ändern und Commit bestätigen.
+Installation auf iPhone:
+1. vitalkompass-200-reparatur.yml aus dem ZIP entpacken.
+2. Auf GitHub in VitalKompass das Verzeichnis .github/workflows öffnen.
+3. Datei dort hochladen und "Commit changes" bestätigen.
+4. EXAKTER Pfad muss lauten:
+   .github/workflows/vitalkompass-200-reparatur.yml
+5. GitHub Actions startet die Installation und Tests automatisch. Erst wenn
+   "Success" erscheint und GitHub Pages erfolgreich veröffentlicht hat,
+   ist 2.0.0 installiert.
 
-Die bestehende verschlüsselte Datenbank, Passwörter und das feste iPhone-Layout werden nicht gelöscht.
-In GitHub NIEMALS private Gesundheitsdaten oder Backups hochladen.
-PDFs sind nach dem Export NICHT automatisch verschlüsselt.
+Wenn GitHub die Datei ins Hauptverzeichnis hochlädt:
+Die dortige Datei in GitHub bearbeiten und den Dateinamen in
+.github/workflows/vitalkompass-200-reparatur.yml ändern, Commit bestätigen.
+
+Keine Gesundheitsdaten oder Backups bei GitHub hochladen. Die vorhandenen
+verschlüsselten Daten und das App-Passwort werden nicht geändert.
