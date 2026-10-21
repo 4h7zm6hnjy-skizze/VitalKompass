@@ -1,22 +1,14 @@
-VitalKompass 1.9.8 – Feste iPhone-Darstellung
+VitalKompass 2.0.0 – Update für iPhone
 
-Dieses Update deaktiviert die Zoomgesten der Webapp. Normales Scrollen,
-Formulare, Datenspeicherung, Passwort und Offline-Modus bleiben unverändert.
+1. Nur die Datei vitalkompass-200.yml bei GitHub in folgendem Pfad ablegen:
+   .github/workflows/vitalkompass-200.yml
+2. Commit changes bestätigen.
+3. Unter Actions den Lauf "VitalKompass 2.0.0 - Urologie und PDF-Themenberichte" prüfen.
+4. Nach erfolgreicher Pages-Veröffentlichung die Webapp öffnen und Version 2.0.0 kontrollieren.
 
-WICHTIG: Nur die Datei vitalkompass-198.yml auf GitHub hochladen.
-Die ZIP-Datei selbst bitte NICHT hochladen.
+Falls GitHub die YAML-Datei ins Hauptverzeichnis hochlädt, oben den Dateinamen in
+.github/workflows/vitalkompass-200.yml ändern und Commit bestätigen.
 
-1. Diese ZIP-Datei in der iPhone-App "Dateien" öffnen/entpacken.
-2. Repo öffnen: https://github.com/4h7zm6hnjy-skizze/VitalKompass
-3. Die Datei vitalkompass-198.yml in .github/workflows/ hochladen.
-4. Der korrekte vollständige Pfad lautet:
-   .github/workflows/vitalkompass-198.yml
-5. Commit changes bestätigen. GitHub führt die Tests aus und installiert das Update.
-
-Falls GitHub im Hauptverzeichnis hochlädt, den Dateinamen im GitHub-Dateieditor
-von vitalkompass-198.yml auf .github/workflows/vitalkompass-198.yml ändern
-und dann Commit changes drücken.
-
-Es werden KEINE privaten Gesundheitsdaten in GitHub hochgeladen.
-Das System darf den Zoom aus Gründen der Bedienungshilfen unter Umständen
-trotzdem zulassen; das ist eine Einschränkung von iOS/WebKit.
+Die bestehende verschlüsselte Datenbank, Passwörter und das feste iPhone-Layout werden nicht gelöscht.
+In GitHub NIEMALS private Gesundheitsdaten oder Backups hochladen.
+PDFs sind nach dem Export NICHT automatisch verschlüsselt.
