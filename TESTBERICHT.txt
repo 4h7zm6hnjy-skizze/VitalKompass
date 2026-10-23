@@ -1,0 +1,20 @@
+TESTBERICHT – ASTHMA 2.9.8, 23.10.2026
+
+Durchgefuehrt:
+- Python-Quellcode kompiliert: bestanden
+- HTML-Reparatur mit Doppel-Script vor <head> und kaputtem </head ...>: bestanden
+- Einmalige Script-Einbindung nach Reparatur: bestanden
+- 'app.js', 'version.json' und 'sw.js' konsistent auf 2.9.8: bestanden
+- PhysioSport-Script im Service-Worker-Praecache und Offline-Fallback: bestanden
+- Wiederholter Reparaturlauf ohne weitere Aenderung: bestanden
+- JavaScript-Syntax des PhysioSport-Moduls mit Node: bestanden
+- GitHub-Actions-YAML syntaktisch geladen: bestanden
+- Workflow-Schritt 'Reparatur und Sicherheitspruefung' mit Test-Repository: bestanden
+- Workflow-Schritt 'vollstaendiges ZIP erstellen' mit Test-Repository: bestanden
+
+NICHT GEPRUEFT / NOCH OFFEN:
+- Echtes Deployment auf GitHub: Verbindung kann nicht auf GitHub schreiben (HTTP 403).
+- Browser- und iPhone-Laufzeittest mit echtem Passwort-Tresor: noch nicht erfolgt.
+- Private Importdatei muss in der entsperrten iPhone-App importiert werden.
+- Vollstaendige App-Dateien stammen beim GitHub-Actions-Bau erst vom echten Repository.
+- GitHub-Actions-Ausfuehrung und Push-Berechtigung muessen nach Installation geprueft werden.

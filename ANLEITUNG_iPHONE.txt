@@ -1,0 +1,53 @@
+ASTHMA-WEBAPP – VOLLUPDATE 2.9.8 (23.10.2026)
+================================================
+
+WAS DAS PAKET ENTHAELT
+- GitHub-Workflow: .github/workflows/asthma-v298-komplett.yml
+- Reparaturprogramm: update_asthma_298.py
+- Bestehendes PhysioSport-Modul: physiosport298.js
+- Testbericht
+
+WAS AUTOMATISCH GEAENDERT WIRD
+1. index.html: kaputten </head>-Abschluss reparieren und doppeltes PhysioSport-Script entfernen.
+2. index.html: Modul einmalig und an der richtigen Stelle vor </head> einbinden.
+3. app.js: sichtbare Versionsanzeige auf 2.9.8 setzen.
+4. version.json: auf 2.9.8 aktualisieren.
+5. sw.js: Offline-Cache auf 2.9.8 umstellen; PhysioSport-Script offline verfuegbar machen.
+6. Vollstaendiges Webapp-ZIP mit allen GitHub-Dateien erzeugen (ohne private Importdaten).
+7. Korrigierte Dateien auf main zurueckschreiben, sofern GitHub Actions Schreibrechte besitzt.
+
+EINMALIGE INSTALLATION (GITHUB IM IPHONE-BROWSER)
+1. GitHub-Repository '4h7zm6hnjy-skizze/Asthma-' oeffnen.
+2. 'Add file' -> 'Create new file' antippen.
+3. Als Dateiname EINGEBEN (Schraegstriche erzeugen Ordner):
+   .github/workflows/asthma-v298-komplett.yml
+4. Inhalt aus der beiliegenden gleichnamigen .yml-Datei kopieren und in den GitHub-Editor einfuegen.
+5. 'Commit changes' bestaetigen.
+6. Im GitHub-Reiter 'Actions' unter 'Asthma 2.9.8 – Komplettreparatur und Download'
+   das Ergebnis ansehen. Bei Erfolg liegen die geaenderten Dateien auf dem main-Zweig.
+   Unter Artifacts gibt es ein vollstaendiges Webapp-ZIP zum Herunterladen.
+
+VORAUSSETZUNGEN
+- GitHub Actions im Repository aktiviert.
+- GitHub-Actions-Berechtigung 'Read and write permissions' oder entsprechende Schreibrechte,
+  wenn die Aenderungen automatisch auf 'main' gespeichert werden sollen.
+- Bei deaktivierten Actions oder Branch-Schutz muss der Workflow gegebenenfalls manuell
+  bestaetigt bzw. freigegeben werden.
+
+NACH DEM UPDATE
+1. Die bestehende iPhone-Webapp im gleichen Safari-Profil oeffnen (kein neues Tresorprofil).
+2. Wie bisher entsperren; ggf. 'Update suchen' und neu laden.
+3. Unter Kalender -> PhysioSport 'Private Termine und Befund importieren' waehlen.
+4. NUR die separate, private Datei 'PhysioSport_und_Lungenfunktion_23-10-2026.json'
+   lokal aus 'Dateien' waehlen. Diese Datei NIEMALS in das oeffentliche GitHub hochladen.
+5. Sechs Termine und den Befund pruefen; die Status- und Notizfunktion testen.
+
+DATENSCHUTZ / DATENERHALT
+Der Code enthaelt keine persoenlichen Messwerte und schreibt nicht in lokale Tresordaten.
+Die private JSON-Importdatei ist unverschluesselt; sie gehoert nicht in GitHub.
+Vor dem Import empfiehlt sich eine verschluesselte Gesamtsicherung in der Asthma-App.
+
+WICHTIG
+Dieses ZIP ist das INSTALLATIONS- UND RELEASE-BAUPAKET. Ein vollstaendiges Repository-
+Archiv kann erst in GitHub Actions aus dem dort liegenden Quellstand erzeugt werden.
+Es ist nicht selbst die gesamte laufende Webapp und noch nicht auf GitHub installiert.
