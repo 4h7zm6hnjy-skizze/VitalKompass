@@ -112,7 +112,7 @@
           lines.push(`${rgb(el.getAttribute('fill')||'#185f9b')} rg ${cx+r} ${cy} m ${cx+r} ${cy+k*r} ${cx+k*r} ${cy+r} ${cx} ${cy+r} c ${cx-k*r} ${cy+r} ${cx-r} ${cy+k*r} ${cx-r} ${cy} c ${cx-r} ${cy-k*r} ${cx-k*r} ${cy-r} ${cx} ${cy-r} c ${cx+k*r} ${cy-r} ${cx+r} ${cy-k*r} ${cx+r} ${cy} c f`);
         }else if(t==='text'){
           const txt=safeText(el.textContent);if(!txt)continue;
-          const fs=8.5*scale+1.5;let tx=xx(el.getAttribute('x'));
+          const svgSize=parseFloat(el.getAttribute('font-size'))||11;const fs=Math.max(8.0,Math.min(11.5,svgSize*scale+1.7));let tx=xx(el.getAttribute('x'));
           const align=el.getAttribute('text-anchor');if(align==='middle')tx-=widthOf(txt,fs)/2;else if(align==='end')tx-=widthOf(txt,fs);
           lines.push(`BT /F1 ${fs.toFixed(2)} Tf ${rgb(el.getAttribute('fill')||'#567085')} rg 1 0 0 1 ${tx.toFixed(2)} ${yy(el.getAttribute('y')).toFixed(2)} Tm (${win(txt)}) Tj ET`);
         }

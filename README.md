@@ -82,3 +82,19 @@ Installation: Unter Backup & Updates zuvor ein verschlüsseltes Backup erstellen
 - BMI=Gewicht(kg)/Körpergröße(m)^2; Körperoberfläche nach Mosteller = Quadratwurzel aus (Größe(cm)×Gewicht(kg)/3600). Neueste gespeicherte Messung hat Vorrang vor dem Profilgewicht. Vorschau aktualisiert sich beim Tippen oder nach dem Speichern, speichert aber keine Werte selbst.
 - Vor Installation verschlüsseltes Backup erstellen. Safari-Websitedaten nicht löschen. Es werden nur öffentliche Programmdateien verändert, keine persönlichen Patientendaten.
 - Browser-Syntax und strukturelle Regressionen im GitHub-Workflow; echter iPhone-Safari-Test ist noch erforderlich.
+
+
+## VitalKompass 2.0.5 – Blutsauerstoff und Perfusionsindex
+- Neuer gemeinsamer Menüpunkt „Blutsauerstoff & Durchblutung (PI)“: SpO₂ in Prozent (Pflicht), PI in Prozent (optional), Datum/Uhrzeit, Messsituation (Raumluft/Sauerstoff), Notiz.
+- Werte lokal AES-GCM verschlüsselt; bearbeiten/löschen. Alter Datensatz und Passwortspeicher bleiben unverändert.
+- Zwei unabhängige SVG-Diagramme: Tag, letzte 7 Tage, Woche, Monat, Jahr, 10 Jahre; zeitliche Mittelwerte sind entsprechend gekennzeichnet.
+- SpO₂-Ampel dient der allgemeinen Orientierung (≥95, 93–94, ≤92 %); individuelle klinische Zielwerte können abweichen. PI ohne universelle Ampelschwellen.
+- Beide Werte in Monats-/Jahresstatistik und separat auswählbaren PDF-Berichten enthalten. PDF-Export ist unverschlüsselt; nur sicher speichern.
+- Vor dem Installieren Backup speichern, Safari-Website-Daten nicht löschen. Kein direkter Hardware-Datenaustausch.
+
+
+## VitalKompass 2.0.5 – Krankenhaus-Scans und kompakte Berichte
+- Krankenhausaufenthalte mit Aufnahme/Entlassung, Krankenhaus, Fachabteilung, Diagnosen, Behandlung, Nachsorge und iPhone-Kamerascan oder PDF-Upload. Originaldokumente bleiben verschlüsselt auf dem Gerät. Kein automatisches OCR.
+- Monats-/Jahresberichte: diagrammgestützte Messarten mit Minimum, Mittelwert und Maximum; keine doppelten Einzeltabellen.
+- Beschriftungen im SVG mit Kollisionsschutz und Ausdünnung bei vielen Messpunkten.
+- SpO₂ und PI im Bericht und PDF sowie Klinikaufenthalte als Berichtsthema.

@@ -419,3 +419,41 @@ body.senior-mode .vk203-menu-item{font-size:1.14rem;min-height:64px}
 body.senior-mode .vk203-home-grid button{font-size:1.05rem}
 @media(prefers-reduced-motion:reduce){.vk203-drawer,.vk203-backdrop{transition:none}}
 @media print{.vk203-drawer-shell,.vk203-menu-trigger,.vk203-home-quick,.vk203-home-metric{display:none!important}}
+
+/* VitalKompass 2.0.5: Blutsauerstoff und Perfusionsindex */
+.vk204-last{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.vk204-last>div,.vk204-stat{border:1px solid #cddfeb;border-radius:12px;padding:14px;background:#f4f9fd;min-width:0}
+.vk204-last span,.vk204-last strong,.vk204-last small,.vk204-stat span,.vk204-stat strong,.vk204-stat small{display:block}
+.vk204-last span,.vk204-stat span{font-size:.95rem;font-weight:750;color:#395c74}
+.vk204-last strong{font-size:1.8rem;margin:7px 0;color:#184968}
+.vk204-last small,.vk204-stat small{font-size:.91rem;color:#3d6076;line-height:1.5}
+.vk204-stat-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;margin:13px 0}
+.vk204-stat strong{font-size:1.55rem;margin:6px 0;color:#124b72}
+.vk204-level{display:inline-block;border-radius:9px;padding:4px 8px;font-weight:850}
+.vk204-green{background:#e0f3e9!important;color:#126444!important}
+.vk204-yellow{background:#fff2d5!important;color:#8b5300!important}
+.vk204-red{background:#ffe5e7!important;color:#a01d32!important}
+#oxygen-form input,#oxygen-form select{min-height:48px;font-size:16px}
+#main[data-section="oxygen"] .panel{border-top:3px solid #1e8c87}
+@media(max-width:520px){.vk204-last,.vk204-stat-grid{grid-template-columns:1fr}.vk204-last strong{font-size:1.55rem}}
+@media print{#oxygen-form,.vk204-stat-grid+form{display:none!important}}
+
+/* VitalKompass 2.0.5: Papierbericht, Labels und Dokumentenscans */
+.vk205-summary{padding:9px 12px;background:#f2f8fc;border-left:4px solid #236f9e;border-radius:8px;font-size:1rem;line-height:1.65;margin:10px 0 13px;overflow-wrap:anywhere}
+.vk205-summary strong{color:#164a70}
+.vk205-stay{border:1px solid #c8dce8;border-radius:14px;padding:17px;margin:12px 0;background:#f8fcff;overflow-wrap:anywhere}
+.vk205-stay h3{margin-bottom:8px;color:#16486d}
+.vk205-scans{border:1px solid #b8d6e5;border-radius:13px;padding:15px;background:#f3faff;margin:15px 0}
+.vk205-file-row{display:flex;flex-wrap:wrap;align-items:center;gap:9px;border-bottom:1px solid #dce9ef;padding:11px 0}
+.vk205-file-row span{flex:1;min-width:130px;overflow-wrap:anywhere}
+.vk205-file-row label{display:flex;gap:5px;align-items:center;font-size:.95rem}
+.vk205-file-row input{width:20px;height:20px}
+.vk205-preview{position:fixed;inset:0;background:#10283ef2;z-index:500;display:flex;flex-direction:column;gap:12px;padding:calc(15px + env(safe-area-inset-top)) 12px calc(15px + env(safe-area-inset-bottom));color:white}
+.vk205-preview>div{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.vk205-preview>div strong{flex:1;overflow-wrap:anywhere}
+.vk205-preview img{display:block;max-width:100%;min-height:0;max-height:100%;object-fit:contain;flex:1}
+.vk205-preview iframe{width:100%;border:0;background:white;flex:1;min-height:0}
+.vk205-preview pre{overflow:auto;background:white;color:#172d40;padding:15px;border-radius:10px;flex:1}
+#hospital-form input,#hospital-form select,#hospital-form textarea{font-size:16px;min-height:48px}
+#main[data-section="hospital"] .panel{border-top:3px solid #317d96}
+@media print{.vk205-stay .actions,#hospital-form,.vk205-preview{display:none!important}}
