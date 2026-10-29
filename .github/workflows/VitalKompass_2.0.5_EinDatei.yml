@@ -1,0 +1,518 @@
+name: VitalKompass 2.0.5 - SpO2 PI Krankenhaus Scans und klare Berichte
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/VitalKompass_2.0.5_EinDatei.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vitalkompass-health-205
+  cancel-in-progress: false
+
+jobs:
+  sicher-aktualisieren:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Repository laden
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: true
+      - name: Sichere Erweiterung der App-Dateien
+        shell: bash
+        run: |
+          python3 - <<'PY_VK204'
+          from pathlib import Path
+          import json,hashlib
+
+          BASE='bb6a48ac2afb17a2a8cf6fb7bde72fb2bea38980'
+          p=Path('app.js'); raw=p.read_bytes(); app=raw.decode('utf-8')
+          sha=hashlib.sha1(('blob '+str(len(raw))+'\0').encode()+raw).hexdigest()
+          if "const VERSION='2.0.5'" in app:
+              print('Version 2.0.5 ist bereits im Repository. Kein zweites Update.')
+              raise SystemExit(0)
+          if sha!=BASE:raise SystemExit('Geprüfte Quellversion 2.0.3 hat sich geändert ('+sha+'). Keine unsichere Überschreibung.')
+          if json.loads(Path('version.json').read_text())['version']!='2.0.3':raise SystemExit('Version stimmt nicht mit 2.0.3 überein. Abbruch.')
+
+          def one(old,new,label):
+              global app
+              cnt=app.count(old)
+              if cnt!=1: raise RuntimeError(label+': erwartet 1 Anker, gefunden '+str(cnt))
+              app=app.replace(old,new)
+
+          one("const VERSION='2.0.3'", "const VERSION='2.0.5'",'Versionsanzeige')
+          one("['asthma','Asthma-Tagebuch','♧'],['labs'", "['asthma','Asthma-Tagebuch','♧'],['oxygen','Blutsauerstoff & Durchblutung (PI)','◉'],['labs'",'Menü Blutsauerstoff')
+          one('asthma:pageAsthma,doctor:pageReportPlus','asthma:pageAsthma,oxygen:pageOxygen,doctor:pageReportPlus','Routen zu Bereichen')
+          one("asthma:'month',lab:'year'", "asthma:'month',oxygen:'month',lab:'year'",'Zeitfilter für Sauerstoff')
+          one('asthmaLogs:[],urologyLogs:[],medStocks:', 'asthmaLogs:[],urologyLogs:[],oxygenLogs:[],medStocks:', 'Leerer verschlüsselter Messdatensatz')
+          one("'weights','asthmaLogs','urologyLogs'])", "'weights','asthmaLogs','urologyLogs','oxygenLogs'])",'Altdaten-Migration')
+          one("['weight','Körpergewicht','Gewichtstagebuch und Diagramm'],['asthma'", "['weight','Körpergewicht','Gewichtstagebuch und Diagramm'],['oxygen','Blutsauerstoff & PI','SpO₂- und PI-Diagramme mit Messwerttabelle'],['asthma'",'PDF-Themenauswahl')
+          one("pageStatsOld()+panel('Asthma im Berichtszeitraum'", "pageStatsOld()+panel('Blutsauerstoff & Durchblutung (PI) – Diagramme',chartPicker('oxygen')+vk204OxygenChart('spo2',chartPeriods.oxygen)+vk204OxygenChart('pi',chartPeriods.oxygen))+panel('Asthma im Berichtszeitraum'",'Diagramme auf Statistikseite')
+          one('function statsHtml(){','function vk204OriginalStatsHtml(){','Statistikbericht erweitern')
+          one('function pageStatsOld(){', 'function statsHtml(){const [from,to]=statsRange();return vk204OriginalStatsHtml()+vk204OxygenStatsSection(vk204OxygenRows().filter(r=>between(r,from,to)),true)}\nfunction pageStatsOld(){','Statistik und PDF integrieren')
+          one("if(sel('asthma')){out+=", "if(sel('oxygen')){const oxygen=vk204OxygenRows().filter(x=>between(x,from,to));out+='<h3>Blutsauerstoff und Perfusionsindex</h3>'+vk204OxygenStatsSection(oxygen,false)+vk204OxygenChart('spo2','day',oxygen)+vk204OxygenChart('pi','day',oxygen)+vk204OxygenTable(oxygen,false)}\n if(sel('asthma')){out+=",'Einzel- und Gesamt-PDF')
+          one("if(!data)return;\nif(form.getAttribute('id')==='weight-goal-form')", "if(!data)return;\nif(form.getAttribute('id')==='oxygen-form'){await vk204OxygenSubmit(f);return}\nif(form.getAttribute('id')==='weight-goal-form')",'Speichervorgang')
+          one("async function doAction(el){const action=el.dataset.action;try{", "async function doAction(el){const action=el.dataset.action;try{\nif(action==='oxygen-edit'){vk204OxygenEdit(el.dataset.id);return}\nif(action==='oxygen-remove'){await vk204OxygenRemove(el.dataset.id);return}", 'Bearbeiten / Löschen')
+          one("if(x.urologyLogs!==undefined&&(!Array.isArray(x.urologyLogs)||x.urologyLogs.length>50000||!x.urologyLogs.every(vkUroValidate)))", "if(x.oxygenLogs!==undefined&&(!Array.isArray(x.oxygenLogs)||x.oxygenLogs.length>50000||!x.oxygenLogs.every(vk204OxygenValid)))throw Error('Backup enthält ungültige SpO₂/PI-Messungen.');\n if(x.urologyLogs!==undefined&&(!Array.isArray(x.urologyLogs)||x.urologyLogs.length>50000||!x.urologyLogs.every(vkUroValidate)))",'Backup-Datenvalidierung')
+
+          helpers=r'''/* VitalKompass 2.0.5: SpO₂ und Perfusionsindex im gemeinsamen Bereich. */
+          function vk204OxygenValid(r){
+           return !!r&&typeof r.id==='string'&&r.id.length>0&&dateValid(r.date)&&r.date<=today()&&timeValid(r.time)&&
+           Number.isInteger(r.spo2)&&r.spo2>=50&&r.spo2<=100&&
+           (r.pi===null||(Number.isFinite(r.pi)&&r.pi>=0.01&&r.pi<=30))&&
+           ['room','oxygen','unknown'].includes(r.situation)&&typeof r.note==='string'&&r.note.length<=400;
+          }
+          function vk204SpO2Level(value){
+           if(!Number.isFinite(value))return {level:'gray',label:'Kein Messwert'};
+           if(value<93)return {level:'red',label:'Niedriger Messwert – erneut prüfen und medizinisch abklären'};
+           if(value<95)return {level:'yellow',label:'Unter üblichem Orientierungsbereich – Verlauf und Symptome beachten'};
+           return {level:'green',label:'Im üblichen Erwachsenen-Orientierungsbereich (keine Entwarnung)'};
+          }
+          function vk204OxygenRows(){return [...(data.oxygenLogs||[])].filter(vk204OxygenValid).sort(sortdate)}
+          function vk204OxygenSituation(value){return ({room:'Raumluft',oxygen:'Mit Sauerstoffgabe',unknown:'Nicht angegeben'})[value]||'Nicht angegeben'}
+          function vk204OxygenStatsSection(rows,heading=true){
+           const values=rows.map(r=>r.spo2).filter(Number.isFinite),pis=rows.map(r=>r.pi).filter(Number.isFinite);
+           const s=values.length?{min:Math.min(...values),max:Math.max(...values),mean:avg(values)}:null;
+           const p=pis.length?{min:Math.min(...pis),max:Math.max(...pis),mean:avg(pis)}:null;
+           const counters={green:0,yellow:0,red:0};values.forEach(v=>{const c=vk204SpO2Level(v).level;if(c in counters)counters[c]++});
+           return `${heading?'<h3>Blutsauerstoff & Perfusionsindex (PI)</h3>':''}<div class="vk204-stat-grid"><div class="vk204-stat"><span>SpO₂-Messungen</span><strong>${values.length}</strong><small>Min ${s?nf(s.min):'–'} % · Mittel ${s?nf(s.mean,1):'–'} % · Max ${s?nf(s.max):'–'} %</small></div><div class="vk204-stat"><span>PI-Messungen</span><strong>${pis.length}</strong><small>Min ${p?nf(p.min,2):'–'} % · Mittel ${p?nf(p.mean,2):'–'} % · Max ${p?nf(p.max,2):'–'} %</small></div></div><p class="section-note">SpO₂-Ampel: ${counters.green} im allgemeinen Orientierungsbereich, ${counters.yellow} grenzwertig, ${counters.red} niedrig. Der PI erhält keine pauschale Ampelbewertung. Einzelwerte sind keine Diagnosen; Messfehler und individuelle ärztliche Zielwerte beachten.</p>`;
+          }
+          function vk204OxygenChart(field,period='month',override=null){
+           const oxygen=override||vk204OxygenRows();
+           const all=override?oxygen:oxygen.filter(r=>r.date>=chartMinDate(period)&&r.date<=today());
+           const keyOf=r=>chartBucket(r,period), buckets=new Map();
+           for(const r of all){const k=keyOf(r);if(!buckets.has(k))buckets.set(k,{date:r.date,time:r.time,_bucket:k,values:[]});const v=r[field];if(Number.isFinite(v))buckets.get(k).values.push(v)}
+           const rows=[...buckets.values()].filter(g=>g.values.length).map(g=>({...g,value:avg(g.values),count:g.values.length})).sort((a,b)=>a._bucket.localeCompare(b._bucket));
+           const isSp=field==='spo2',title=isSp?'Blutsauerstoff (SpO₂)':'Perfusionsindex (PI)',unit='%';
+           if(!rows.length)return `<p class="section-note">${title}: Für den gewählten Zeitraum liegen keine Messungen vor.</p>`;
+           const W=700,H=275,L=50,R=18,T=18,B=47,plotW=W-L-R,plotH=H-T-B;
+           const vals=rows.map(r=>r.value),lo=isSp?Math.max(50,Math.floor(Math.min(90,...vals)-4)):0;
+           const hi=isSp?100:Math.max(1,Math.ceil(Math.max(...vals)*1.2*10)/10);
+           const xx=i=>L+(rows.length===1?plotW/2:i*plotW/(rows.length-1));
+           const yy=v=>T+plotH-(v-lo)/(hi-lo)*plotH;
+           const grid=Array.from({length:5},(_,i)=>{const v=lo+(hi-lo)*i/4;return `<line x1="${L}" y1="${yy(v)}" x2="${W-R}" y2="${yy(v)}" stroke="#d8e4ef"/><text x="${L-6}" y="${yy(v)+4}" text-anchor="end" font-size="12" fill="#3d6077">${nf(v,isSp?0:2)}</text>`}).join('');
+           const thresholds=isSp?[93,95].filter(v=>v>=lo).map(v=>`<line x1="${L}" x2="${W-R}" y1="${yy(v)}" y2="${yy(v)}" stroke="${v===93?'#c22842':'#b87910'}" stroke-dasharray="6 5" stroke-width="2" opacity=".8"><title>Orientierung ${v}%</title></line>`).join(''):'';
+           const path=rows.length>1?`<polyline fill="none" stroke="${isSp?'#178377':'#2466a6'}" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" points="${rows.map((r,i)=>xx(i)+','+yy(r.value)).join(' ')}"/>`:'';
+           const dots=rows.map((r,i)=>{const level=isSp?vk204SpO2Level(r.value):{level:'blue',label:'PI: keine universelle medizinische Schwelle'};const col=isSp?VK_TRAFFIC_COLORS[level.level]:'#2466a6';const label=`${title} ${nf(r.value,2)} ${unit} · ${fmtDate(r.date)} · ${level.label}${r.count>1?' · Mittel aus '+r.count+' Messungen':''}`;return `<circle cx="${xx(i)}" cy="${yy(r.value)}" r="5.4" stroke="white" stroke-width="1.8" fill="${col}" tabindex="0" role="button" class="vk-chart-point" data-chart-info="${h(label)}"><title>${h(label)}</title></circle>`}).join('');
+           const tickPos=[0,Math.floor((rows.length-1)/2),rows.length-1].filter((v,i,a)=>a.indexOf(v)===i);
+           const ticks=tickPos.map(i=>`<text x="${xx(i)}" y="${H-15}" text-anchor="middle" font-size="12" fill="#365c70">${period==='ten'?h(rows[i]._bucket):fmtDate(rows[i].date)}</text>`).join('');
+           return `<div class="chartwrap"><svg class="chart" role="img" aria-label="${title}, ${rows.length} Messpunkte" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">${grid}${thresholds}${path}${dots}${ticks}</svg></div>${isSp?chartTrafficLegend():'<p class="section-note">PI in Prozent: Signalstärke der Durchblutung an der Messstelle. Keine allgemeingültigen Ampel-Grenzen; Gerät, Finger, Temperatur und Bewegung beeinflussen den Wert.</p>'}<p class="section-note">${title}: ${rows.length} Zeitpunkte${period==='day'?'':'; mehrere Messungen pro Zeitraum werden gemittelt'}. Für Trends Einzelwerte und Messumstände berücksichtigen.</p>`;
+          }
+          function vk204OxygenTable(rows,actions=true){
+           if(!rows.length)return '<p class="section-note">Noch keine SpO₂-/PI-Messungen vorhanden.</p>';
+           return `<div class="table-wrap"><table><thead><tr><th>Datum</th><th>SpO₂</th><th>PI</th><th>Messsituation / Notiz</th>${actions?'<th>Aktionen</th>':''}</tr></thead><tbody>${[...rows].reverse().slice(0,150).map(r=>`<tr><td>${fmtDate(r.date)} ${h(r.time)}</td><td><strong><span class="vk204-level vk204-${vk204SpO2Level(r.spo2).level}">${nf(r.spo2)} %</span></strong></td><td>${Number.isFinite(r.pi)?nf(r.pi,2)+' %':'–'}</td><td>${h(vk204OxygenSituation(r.situation))}${r.note?' · '+h(r.note):''}</td>${actions?`<td><button type="button" class="secondary" data-action="oxygen-edit" data-id="${h(r.id)}">Bearbeiten</button> <button type="button" class="dangerbutton" data-action="oxygen-remove" data-id="${h(r.id)}">Löschen</button></td>`:''}</tr>`).join('')}</tbody></table></div>`;
+          }
+          function pageOxygen(){
+           const rows=vk204OxygenRows(),latest=rows.at(-1),level=latest?vk204SpO2Level(latest.spo2):null;
+           const quick=latest?`<div class="vk204-last"><div><span>Letzter Blutsauerstoff</span><strong class="vk204-level vk204-${level.level}">${latest.spo2} %</strong><small>${h(level.label)}</small></div><div><span>Perfusionsindex (PI)</span><strong>${Number.isFinite(latest.pi)?nf(latest.pi,2)+' %':'Nicht angegeben'}</strong><small>${fmtDate(latest.date)} · ${h(latest.time)}</small></div></div>`:'<p class="section-note">Noch keine Messung eingetragen.</p>';
+           return tag('Blutsauerstoff & Durchblutung (PI)','SpO₂ und Perfusionsindex gemeinsam erfassen, getrennt auswerten und als PDF dokumentieren.')+
+           panel('Aktuelle Messung',quick)+
+           panel('Neue Messung eintragen',`<form id="oxygen-form"><input type="hidden" name="id" value=""><div class="form-grid"><label class="field"><span>Datum</span><input type="date" name="date" value="${today()}" required></label><label class="field"><span>Uhrzeit</span><input type="time" name="time" value="${nowTime()}" required></label><label class="field"><span>Blutsauerstoff SpO₂ (%)</span><input type="number" inputmode="numeric" name="spo2" min="50" max="100" step="1" required placeholder="z. B. 96"></label><label class="field"><span>Perfusionsindex PI (%) – optional</span><input type="number" inputmode="decimal" name="pi" min="0.01" max="30" step="0.01" placeholder="z. B. 3,20"></label><label class="field"><span>Messsituation</span><select name="situation"><option value="room">Raumluft</option><option value="oxygen">Mit Sauerstoffgabe</option><option value="unknown">Nicht angegeben</option></select></label><label class="field"><span>Messgerät, Beschwerden oder Notiz (optional)</span><input name="note" maxlength="400" placeholder="z. B. Ruhe, kalte Finger, nach Bewegung"></label></div><div class="actions"><button class="primary" type="submit" id="vk204-save">Messung speichern</button><button class="secondary" type="button" data-action="oxygen-reset">Bearbeitung abbrechen</button></div><p class="section-note">Die gespeicherten Werte werden ausschließlich lokal verschlüsselt abgelegt. Optionaler PI-Wert kann später ergänzt werden.</p></form>`)+
+           panel('Blutsauerstoff – Diagramm',chartPicker('oxygen')+vk204OxygenChart('spo2',chartPeriods.oxygen))+
+           panel('Durchblutungssignal PI – Diagramm',vk204OxygenChart('pi',chartPeriods.oxygen))+
+           panel('Statistik',vk204OxygenStatsSection(rows,false)+`<p class="section-note">Für Monats- und Jahresberichte „Statistiken“ öffnen. Über „Arztbericht / PDF“ lässt sich dieser Bereich auch einzeln auswählen und exportieren.</p>`)+
+           panel('Gespeicherte Messungen',vk204OxygenTable(rows))+
+           panel('Wie sind die Werte einzuordnen?',`<p><strong>SpO₂:</strong> Die Ampel nutzt allgemeine Orientierungsbereiche für Erwachsene (grün ≥95 %, gelb 93–94 %, rot ≤92 %). Bei chronischen Lungenerkrankungen können ärztlich festgelegte Zielwerte abweichen. Bei deutlich niedriger Messung in Ruhe erneut messen und zeitnah medizinisch abklären; bei schwerer Atemnot, Brustschmerz, Verwirrtheit oder blauen Lippen <strong>112</strong> rufen.</p><p><strong>PI:</strong> Der Perfusionsindex zeigt die relative Puls-Signalstärke an der Messstelle, keine direkte Messung der Durchblutung im ganzen Körper. Dafür gibt es keine universell gültigen Ampelgrenzen. Kalte Finger, Bewegung, Nagellack und Gerätequalität können beide Werte beeinflussen. Die App ersetzt kein Pulsoximeter und keine ärztliche Beurteilung.</p>`);
+          }
+          async function vk204OxygenSubmit(f){
+           const date=String(f.get('date')||''),time=String(f.get('time')||''),rawPi=String(f.get('pi')??'').trim();
+           const spo2=Number(f.get('spo2')),pi=rawPi===''?null:nval(rawPi),entryId=String(f.get('id')||'');
+           const item={id:entryId||id(),date,time,spo2,pi:pi===null?null:Math.round(pi*100)/100,situation:String(f.get('situation')||''),note:String(f.get('note')||'').slice(0,400)};
+           if(!vk204OxygenValid(item))throw Error('Datum, Uhrzeit, SpO₂ (50–100 %) und PI (0,01–30 %, optional) überprüfen.');
+           const before=data.oxygenLogs,existing=before.findIndex(r=>r.id===entryId);
+           if(entryId&&existing<0)throw Error('Der zu bearbeitende Messwert wurde nicht gefunden.');
+           const next=[...before];if(existing>=0)next[existing]=item;else next.push(item);
+           data.oxygenLogs=next;try{await save()}catch(e){data.oxygenLogs=before;throw e}
+           renderMain();toast('Blutsauerstoff und PI sicher gespeichert.');
+           if(spo2<=92)alert('SpO₂ niedrig: nach kurzer Ruhe und mit warmen Fingern erneut messen. Bei erneut niedrigem Wert medizinische Hilfe holen. Bei schwerer Atemnot, Brustschmerz, Verwirrtheit oder blauen Lippen 112. Ärztliche Zielbereiche können individuell abweichen.');
+          }
+          function vk204OxygenEdit(entryId){
+           const r=(data.oxygenLogs||[]).find(o=>o.id===entryId),form=$('#oxygen-form');if(!r||!form)throw Error('Messung oder Eingabeformular nicht gefunden.');
+           for(const name of ['id','date','time','spo2','situation','note'])form.elements[name].value=r[name]??'';
+           form.elements.pi.value=r.pi??'';
+           const save=$('#vk204-save');if(save)save.textContent='Änderungen speichern';
+           form.scrollIntoView({behavior:'smooth',block:'center'});form.elements.spo2.focus();
+          }
+          async function vk204OxygenRemove(entryId){
+           const before=data.oxygenLogs;if(!before.some(r=>r.id===entryId))throw Error('Messung nicht gefunden.');
+           if(!confirm('Diese SpO₂-/PI-Messung dauerhaft löschen?'))return;
+           data.oxygenLogs=before.filter(r=>r.id!==entryId);
+           try{await save()}catch(e){data.oxygenLogs=before;throw e}
+           renderMain();toast('Messung gelöscht.');
+          }
+          '''
+
+          one('function pageGlucose(){',helpers+'\nfunction pageGlucose(){','Modul SpO₂/PI')
+          one("if(action==='oxygen-remove'){await vk204OxygenRemove(el.dataset.id);return}", "if(action==='oxygen-remove'){await vk204OxygenRemove(el.dataset.id);return}\nif(action==='oxygen-reset'){renderMain();return}", 'Bearbeitung abbrechen')
+
+
+          # 2.0.5 ergänzt den noch nicht veröffentlichten 2.0.4-Stand um Krankenhaus-Scans und reduzierte Berichte.
+          one("['reminders','Kontrollen & Termine','◷'],['prevention'", "['reminders','Kontrollen & Termine','◷'],['hospital','Krankenhausaufenthalte & Scans','▤'],['prevention'", 'Krankenhaus im Slide-out-Menü')
+          one('reminders:pageReminders,evidence:pageEvidence', 'reminders:pageReminders,hospital:pageHospital,evidence:pageEvidence','Krankenhaus-Navigation')
+          one('asthmaLogs:[],urologyLogs:[],oxygenLogs:[],medStocks:', 'asthmaLogs:[],urologyLogs:[],oxygenLogs:[],hospitalStays:[],medStocks:', 'Krankenhaus-Datenstruktur')
+          one("'weights','asthmaLogs','urologyLogs','oxygenLogs'])", "'weights','asthmaLogs','urologyLogs','oxygenLogs','hospitalStays'])", 'Datenmigration Krankenhaus')
+          one("['oxygen','Blutsauerstoff & PI','SpO₂- und PI-Diagramme mit Messwerttabelle'],['asthma'", "['oxygen','Blutsauerstoff & PI','SpO₂- und PI-Diagramme mit Statistik'],['hospital','Krankenhausaufenthalte','Aufenthalte und dokumentierte Befunde'],['asthma'", 'PDF-Auswahl Krankenhaus')
+          # Krankenhausanhänge zählen zum bestehenden Speicherbudget von 12 MB; auch ältere Backups bleiben gültig.
+          one('return used<=VK201_TOTAL', 'for(const stay of vault.hospitalStays||[])used+=(stay.files||[]).reduce((n,f)=>n+f.size,0);return used<=VK201_TOTAL','Backup-Attachmentlimit')
+          one('return used}', 'for(const stay of data.hospitalStays||[])used+=(stay.files||[]).reduce((n,f)=>n+f.size,0);return used}', 'Gesamtanhangslimit')
+          one('if(x.urologyLogs!==undefined&&(!Array.isArray(x.urologyLogs)', "if(x.hospitalStays!==undefined&&(!Array.isArray(x.hospitalStays)||x.hospitalStays.length>5000||!x.hospitalStays.every(vk205HospitalValid)))throw Error('Backup enthält ungültige Krankenhausaufenthalte oder Scans.');\n if(x.urologyLogs!==undefined&&(!Array.isArray(x.urologyLogs)", 'Backup-Krankenhausvalidierung')
+          # Laden, Anzeigen und Speichern bleiben in der App-Verschlüsselung; es gibt keinen Upload an GitHub.
+          module205=r'''
+          /* VitalKompass 2.0.5: gut lesbare Berichte und Krankenhausaufenthalte. */
+          function vk205Summary(title,rows,field,unit='',decimals=1){
+           const values=rows.map(r=>r[field]).filter(Number.isFinite);
+           if(!values.length)return `<p class="vk205-summary"><strong>${h(title)}</strong>: Keine Messungen im Zeitraum.</p>`;
+           return `<p class="vk205-summary"><strong>${h(title)}</strong> · Minimum ${nf(Math.min(...values),decimals)} ${h(unit)} · Durchschnitt ${nf(avg(values),decimals)} ${h(unit)} · Maximum ${nf(Math.max(...values),decimals)} ${h(unit)}</p>`;
+          }
+          /* Zahl direkt am Messpunkt. Bei Platzmangel ist die Beschriftung ausgedünnt,
+             nicht überlagert; jeder Einzelwert bleibt per Antippen des Punktes erreichbar. */
+          function vk205PointLabels(points,W,H,L,R,T,B,decimals=1){
+           const clean=points.filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y)&&Number.isFinite(p.v));
+           if(!clean.length)return '';
+           const occupied=[];let output='';const maxCount=clean.length;
+           const stride=Math.max(1,Math.ceil(maxCount/24));
+           for(let index=0;index<clean.length;index++){
+            const p=clean[index];if(index%stride!==0&&index!==clean.length-1)continue;
+            const label=nf(p.v,decimals),width=Math.max(28,label.length*8.2+8),height=16;
+            const cx=Math.max(L+width/2+2,Math.min(W-R-width/2-2,p.x));
+            const candidates=[p.y-21,p.y+25,p.y-36,p.y+40];let chosen=null;
+            for(const cy of candidates){
+             const box={x:cx-width/2-4,y:cy-height+2,w:width+8,h:height+5};
+             if(box.y<T+2||box.y+box.h>H-B-4)continue;
+             if(occupied.some(b=>!(box.x+box.w+5<b.x||b.x+b.w+5<box.x||box.y+box.h+3<b.y||b.y+b.h+3<box.y)))continue;
+             chosen={cy,box};break;
+            }
+            if(!chosen)continue;occupied.push(chosen.box);
+            output+=`<text class="vk205-point-value" x="${cx}" y="${chosen.cy}" text-anchor="middle" font-size="12.5" font-weight="700" fill="#12344e" stroke="#ffffff" stroke-width="3" paint-order="stroke fill">${h(label)}</text>`;
+           }
+           return output;
+          }
+          function vk205HospitalValid(s){
+           if(!s||typeof s.id!=='string'||s.id.length<1||s.id.length>130||!dateValid(s.admitted)||s.admitted>today()||s.discharged!==''&&(!dateValid(s.discharged)||s.discharged<s.admitted||s.discharged>today()))return false;
+           for(const field of ['hospital','department','diagnosis','treatment','notes'])if(typeof s[field]!=='string'||s[field].length>(field==='notes'?2500:field==='hospital'||field==='department'?150:1000))return false;
+           if(!s.hospital.trim()||!Array.isArray(s.files)||s.files.length>4)return false;
+           return s.files.every(vk201ValidateFile);
+          }
+          function vk205Stays(){return [...(data.hospitalStays||[])].filter(vk205HospitalValid).sort((a,b)=>b.admitted.localeCompare(a.admitted))}
+          function vk205HospitalOverlap(s,from,to){return s.admitted<=to&&(!s.discharged||s.discharged>=from)}
+          function vk205HospitalDays(s,from,to){const start=[s.admitted,from].sort().at(-1),end=[s.discharged||today(),to].sort()[0];if(start>end)return 0;return Math.round((Date.parse(end+'T12:00:00Z')-Date.parse(start+'T12:00:00Z'))/86400000)+1}
+          function vk205HospitalReport(from,to,showList=true){
+           const stays=vk205Stays().filter(s=>vk205HospitalOverlap(s,from,to));
+           const days=stays.reduce((n,s)=>n+vk205HospitalDays(s,from,to),0);
+           const intro=`<p class="vk205-summary"><strong>Krankenhausaufenthalte:</strong> ${stays.length} · dokumentierte Aufenthaltstage im Zeitraum: ${days}. ${stays.some(s=>!s.discharged)?'Mindestens ein Aufenthalt ohne Entlassungsdatum.':''}</p>`;
+           if(!showList||!stays.length)return intro;
+           return intro+vkReportTable(['Aufnahme / Entlassung','Krankenhaus / Fachbereich','Diagnosen / Behandlung','Befunde'],stays.map(s=>[fmtDate(s.admitted)+' – '+(s.discharged?fmtDate(s.discharged):'noch offen'),s.hospital+' / '+s.department,[s.diagnosis,s.treatment,s.notes].filter(Boolean).join(' · '),s.files.length+' Scan(s) gespeichert (nicht im PDF enthalten)']));
+          }
+          function vk205HospitalFilesHtml(s){
+           const files=s?.files||[];
+           return files.length?`<div class="vk205-file-list">${files.map((file,index)=>`<div class="vk205-file-row"><span>${h(file.name)} · ${nf(file.size/1024,0)} KB</span><button type="button" class="secondary" data-action="hospital-view-file" data-id="${h(s.id)}" data-index="${index}">Ansehen</button><label><input type="checkbox" name="removeFile" value="${index}"> Entfernen</label></div>`).join('')}</div>`:'<p class="section-note">Noch kein Dokument gespeichert.</p>';
+          }
+          function pageHospital(){
+           const stays=vk205Stays(),[from,to]=statsRange(),existing=stays.filter(s=>vk205HospitalOverlap(s,from,to));
+           return tag('Krankenhausaufenthalte & Scans','Aufenthalte, Arztbriefe und Befunde in einem verschlüsselten Bereich dokumentieren.')+
+           panel('Aufenthalt erfassen oder ändern',`<form id="hospital-form" novalidate><input type="hidden" name="id" value=""><div class="form-grid"><label class="field"><span>Aufnahmedatum</span><input name="admitted" type="date" required value="${today()}"></label><label class="field"><span>Entlassungsdatum (leer = noch stationär)</span><input name="discharged" type="date"></label><label class="field"><span>Krankenhaus / Klinik</span><input name="hospital" maxlength="150" required placeholder="Name der Klinik"></label><label class="field"><span>Station / Fachabteilung</span><input name="department" maxlength="150" placeholder="z. B. Pneumologie"></label></div><label class="field"><span>Diagnosen / Aufnahmegrund</span><textarea name="diagnosis" rows="3" maxlength="1000"></textarea></label><label class="field"><span>Untersuchungen und Behandlung</span><textarea name="treatment" rows="3" maxlength="1000"></textarea></label><label class="field"><span>Notizen / Nachsorgetermin</span><textarea name="notes" rows="3" maxlength="2500"></textarea></label><div class="vk205-scans"><h3>Arztbriefe und Befunde scannen</h3><p class="section-note">Die iPhone-Kamera kann ein Foto eines Dokuments aufnehmen. Alternativ vorhandene Bilder/PDFs wählen. Fotos werden vor dem Verschlüsseln verkleinert; OCR/Texterkennung erfolgt nicht automatisch.</p><label class="field"><span>Mit Kamera aufnehmen</span><input name="scan" type="file" accept="image/*" capture="environment"></label><label class="field"><span>Vorhandene Bilder, PDFs oder Textdateien hinzufügen</span><input name="files" type="file" accept=".jpg,.jpeg,.png,.pdf,.txt,image/jpeg,image/png,application/pdf,text/plain" multiple></label><p class="section-note">Maximal vier Anhänge je Aufenthalt, je höchstens 1,5 MB nach Bildoptimierung. Gespeicherte Anhänge werden beim Bearbeiten angezeigt.</p><div id="vk205-existing-files"></div></div><div class="actions"><button class="primary" type="submit">Aufenthalt verschlüsselt speichern</button><button type="button" class="secondary" data-action="hospital-reset">Neue Eingabe / Abbrechen</button></div><p class="section-note" id="vk205-hospital-status" role="status"></p></form>`)+
+           panel('Aufenthaltsstatistik',vk205HospitalReport(from,to,false)+`<p class="section-note">Für die Monats-/Jahresstatistik werden alle Aufenthalte berücksichtigt, die den ausgewählten Zeitraum schneiden.</p>`)+
+           panel('Gespeicherte Aufenthalte',stays.length?stays.map(s=>`<article class="vk205-stay"><h3>${h(s.hospital)}</h3><p><strong>${fmtDate(s.admitted)} – ${s.discharged?fmtDate(s.discharged):'noch stationär'}</strong>${s.department?' · '+h(s.department):''}</p>${s.diagnosis?`<p><b>Diagnosen:</b> ${h(s.diagnosis)}</p>`:''}${s.treatment?`<p><b>Behandlung:</b> ${h(s.treatment)}</p>`:''}${s.notes?`<p>${h(s.notes)}</p>`:''}<p>${s.files.length} gespeicherte Dokumente</p><div class="actions"><button type="button" class="secondary" data-action="hospital-edit" data-id="${h(s.id)}">Bearbeiten / Scans</button><button type="button" class="dangerbutton" data-action="hospital-remove" data-id="${h(s.id)}">Aufenthalt löschen</button></div></article>`).join(''):'<p class="section-note">Noch kein Krankenhausaufenthalt dokumentiert.</p>');
+          }
+          function vk205HospitalEdit(entryId){
+           const s=vk205Stays().find(v=>v.id===entryId),form=$('#hospital-form');if(!s||!form)throw Error('Aufenthalt nicht gefunden.');
+           for(const field of ['id','admitted','discharged','hospital','department','diagnosis','treatment','notes'])form.elements[field].value=s[field]??'';
+           $('#vk205-existing-files').innerHTML=vk205HospitalFilesHtml(s);
+           form.scrollIntoView({behavior:'smooth',block:'start'});form.elements.hospital.focus();
+          }
+          async function vk205HospitalFile(file){
+           if(!(file instanceof File)||!file.size)return null;
+           let source=file;
+           const isImage=/^image\/(jpeg|png|heic|heif)$/.test(file.type)||/\.(jpe?g|png|heic)$/i.test(file.name);
+           if(isImage){
+            try{
+             const image=await createImageBitmap(file),long=Math.max(image.width,image.height),scale=Math.min(1,1600/long),canvas=document.createElement('canvas');
+             canvas.width=Math.max(1,Math.round(image.width*scale));canvas.height=Math.max(1,Math.round(image.height*scale));
+             canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height);image.close?.();
+             for(const q of [.82,.68,.53]){
+              const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',q));if(blob&&blob.size<=VK201_LIMIT){source=new File([blob],file.name.replace(/\.[^.]+$/, '')+'.jpg',{type:'image/jpeg'});break}
+             }
+            }catch{/* Originaldatei wird danach auf Dateigröße geprüft. */}
+           }
+           if(source.size>VK201_LIMIT)throw Error('Scan zu groß. Bitte ein gut lesbares Foto oder ein PDF unter 1,5 MB auswählen.');
+           const list=await vk201ReadNew([source]);if(list.length!==1)throw Error('Das Dokument konnte nicht gelesen werden.');return list[0];
+          }
+          async function vk205HospitalSave(form){
+           const f=new FormData(form),entryId=String(f.get('id')||''),before=data.hospitalStays||[],existing=entryId?before.find(s=>s.id===entryId):null;
+           if(entryId&&!existing)throw Error('Der bisherige Aufenthalt wurde nicht gefunden.');
+           const files=[...(existing?.files||[])],removed=new Set(f.getAll('removeFile').map(String));
+           if([...removed].some(v=>!/^(0|[1-9]\d*)$/.test(v)||Number(v)>=files.length))throw Error('Anhangsauswahl ungültig.');
+           const keep=files.filter((_,i)=>!removed.has(String(i))),newFiles=[...form.querySelectorAll('input[type=file]')].flatMap(el=>[...el.files]).filter(f=>f.size>0);
+           if(keep.length+newFiles.length>4)throw Error('Pro Aufenthalt sind insgesamt höchstens vier Scans erlaubt.');
+           const added=[];for(const file of newFiles)added.push(await vk205HospitalFile(file));
+           const s={id:entryId||id(),admitted:String(f.get('admitted')||''),discharged:String(f.get('discharged')||''),hospital:String(f.get('hospital')||'').trim(),department:String(f.get('department')||'').trim(),diagnosis:String(f.get('diagnosis')||'').trim(),treatment:String(f.get('treatment')||'').trim(),notes:String(f.get('notes')||'').trim(),files:[...keep,...added]};
+           if(!vk205HospitalValid(s))throw Error('Aufnahme/Entlassung, Krankenhaus oder Dokumente überprüfen.');
+           const next=entryId?before.map(x=>x.id===entryId?s:x):[...before,s];
+           if(!vk201BackupWithinLimit({...data,hospitalStays:next}))throw Error('Verschlüsselter Dokumentenspeicher über 12 MB. Bitte weniger oder kleinere Scans speichern.');
+           data.hospitalStays=next;try{await save()}catch(e){data.hospitalStays=before;throw e}
+           renderMain();toast('Krankenhausaufenthalt und Scans verschlüsselt gespeichert.');
+          }
+          async function vk205HospitalRemove(entryId){
+           const previous=data.hospitalStays||[];if(!previous.some(x=>x.id===entryId))throw Error('Aufenthalt nicht gefunden.');
+           if(!confirm('Aufenthalt und zugehörige Scans dauerhaft löschen?'))return;
+           data.hospitalStays=previous.filter(x=>x.id!==entryId);try{await save()}catch(e){data.hospitalStays=previous;throw e}
+           renderMain();toast('Aufenthalt gelöscht.');
+          }
+          function vk205HospitalView(entryId,index){
+           const s=vk205Stays().find(x=>x.id===entryId),a=s?.files[Number(index)];if(!a||!vk201ValidateFile(a))throw Error('Dokument nicht gefunden oder ungültig.');
+           const bytes=unb64(a.base64),blob=new Blob([bytes],{type:a.mime}),url=URL.createObjectURL(blob);
+           const dialog=document.createElement('div');dialog.id='vk205-document-preview';dialog.className='vk205-preview';
+           const filename=document.createElement('strong');filename.textContent=a.name;
+           const btn=document.createElement('button');btn.textContent='Schließen';btn.type='button';btn.className='secondary';btn.onclick=()=>{dialog.remove();URL.revokeObjectURL(url)};
+           const bar=document.createElement('div');bar.append(filename,btn);dialog.append(bar);
+           const preview=document.createElement(a.mime.startsWith('image/')?'img':a.mime==='application/pdf'?'iframe':'pre');
+           if(preview.tagName==='PRE'){preview.textContent=new TextDecoder().decode(bytes)}else{preview.src=url;preview.setAttribute('title',a.name)}
+           dialog.append(preview);document.getElementById('vk205-document-preview')?.remove();document.body.append(dialog);
+          }
+
+          '''
+          one('function pageGlucose(){', module205+'\nfunction pageGlucose(){','Krankenhaus- und Diagramm-Modul')
+          compact205=r'''
+          /* 2.0.5: pro Diagramm nur Minimum, Durchschnitt und Maximum, keine Messwert-Doppeltabellen. */
+          function statsHtml(){
+           const [from,to,label]=statsRange();
+           const glucose=filtered('glucose').filter(r=>between(r,from,to)&&r.verified===true);
+           const bp=filtered('bp').filter(r=>between(r,from,to)&&r.verified===true);
+           const weight=(data.weights||[]).filter(r=>between(r,from,to));
+           const oxygen=vk204OxygenRows().filter(r=>between(r,from,to));
+           const asthma=(data.asthmaLogs||[]).filter(r=>between(r,from,to));
+           const labs=(data.labs||[]).filter(r=>between(r,from,to)&&r.verified===true);
+           const chartPeriod=reportPeriod==='year'?'year':'month';
+           let result=`<p>Berichtszeitraum: <strong>${h(label)}</strong>. Bestätigte Messungen werden dargestellt; fehlende Einträge bedeuten nicht normale Werte. Bei vielen Messpunkten werden Wertetiketten zur besseren Lesbarkeit ausgedünnt. Einzeldaten bleiben im jeweiligen Tagebuch erhalten.</p>`;
+           result+='<h3>Körpergewicht</h3>'+vk205Summary('Gewicht',weight,'kg','kg',1)+weightChart(chartPeriod,weight,700,'all');
+           result+='<h3>Blutzucker</h3>'+vk205Summary('Glukose',glucose,'mgdl','mg/dl',1)+lineChart('glucose',chartPeriod,700,glucose);
+           result+='<h3>Blutdruck</h3>'+vk205Summary('Systolisch',bp,'sys','mmHg',0)+vk205Summary('Diastolisch',bp,'dia','mmHg',0)+lineChart('bp',chartPeriod,700,bp);
+           result+='<h3>Puls</h3>'+vk205Summary('Puls',bp,'pulse','/min',0)+lineChart('pulse',chartPeriod,700,bp);
+           result+='<h3>Blutsauerstoff und Perfusionsindex</h3>'+vk205Summary('SpO₂',oxygen,'spo2','%',1)+vk204OxygenChart('spo2',chartPeriod,oxygen)+vk205Summary('PI',oxygen,'pi','%',2)+vk204OxygenChart('pi',chartPeriod,oxygen);
+           result+='<h3>Asthma und Lungenfunktion</h3>'+vk205Summary('Peak-Flow',asthma,'peakFlow','l/min',0)+vkMiniTrend(asthma,'peakFlow','Peak-Flow','l/min',chartPeriod)+vk205Summary('FEV1',asthma,'fev1Pct','%',1)+vkMiniTrend(asthma,'fev1Pct','FEV1','%',chartPeriod)+vk205Summary('Atemnot',asthma,'breathlessness','/10',1)+vkMiniTrend(asthma,'breathlessness','Atemnot','/10',chartPeriod);
+           result+='<h3>Krankenhausaufenthalte</h3>'+vk205HospitalReport(from,to,true);
+           result+='<h3>Laborbefunde</h3>'+(labs.length?vkReportTable(['Datum','Laborwert','Ergebnis / Einheit','Referenz'],labs.map(r=>[fmtDate(r.date),r.name,nf(r.value,3)+' '+(r.unit||''),labReference(r)])):'<p>Keine bestätigten Laborbefunde im Zeitraum.</p>');
+           result+='<h3>Medikamentenplan (dokumentierter Stand)</h3>'+(data.meds.length?'<p>'+data.meds.map(r=>h(r.name+' '+(r.dose||'')+' '+(r.schedule||''))).join('; ')+'</p>':'<p>Keine Medikamente dokumentiert.</p>');
+           return result+'<p class="section-note">Die Berechnungen beruhen auf gespeicherten Einzelmessungen (nicht auf Tages- oder Wochenmitteln). Diagramme können gemittelte Messpunkte darstellen. Keine medizinische Diagnose. Exportierte PDF-Dateien sind nicht automatisch verschlüsselt.</p>';
+          }
+
+          '''
+
+          start=app.index('function vk204OriginalStatsHtml(){')
+          finish=app.index('function pageStatsOld(){',start)
+          assert app.count('function vk204OriginalStatsHtml(){')==1
+          app=app[:start]+compact205+'\n'+app[finish:]
+          # Die Diagramme innerhalb des Berichts erscheinen nur einmal, nicht zusätzlich als separate Übersicht.
+          extraCharts="panel('Interaktive Langzeitdiagramme',chartPicker('weight')+weightChart(chartPeriods.weight,null,700,'all')+chartPicker('glucose')+lineChart('glucose',chartPeriods.glucose,700)+chartPicker('bp')+lineChart('bp',chartPeriods.bp,700)+chartPicker('pulse')+lineChart('pulse',chartPeriods.pulse,700))+"
+          one(extraCharts,'','Doppelte Diagramme auf Statistikseite')
+          start=app.index('function pageStats(){')
+          finish=app.index('function measurementTable(',start)
+          assert finish>start
+          app=app[:start]+"""function pageStats(){return pageStatsOld()+panel('Ausgewählte PDF-Berichte','<p>Einzelne Themen oder mehrere Bereiche gezielt als PDF ausgeben.</p><button type="button" class="primary" data-view="doctor">Berichte auswählen / drucken</button>')}
+          """+app[finish:]
+          pdf205=r'''
+           if(sel('glucose')){out+='<h3>Blutzucker</h3>'+vk205Summary('Glukose',r.glucose,'mgdl','mg/dl',1)+lineChart('glucose',period,700,r.glucose)}
+           if(sel('bp')){out+='<h3>Blutdruck</h3>'+vk205Summary('Systolisch',r.bp,'sys','mmHg',0)+vk205Summary('Diastolisch',r.bp,'dia','mmHg',0)+lineChart('bp',period,700,r.bp)}
+           if(sel('pulse')){out+='<h3>Puls</h3>'+vk205Summary('Puls',r.bp,'pulse','/min',0)+lineChart('pulse',period,700,r.bp)}
+           if(sel('weight')){out+='<h3>Körpergewicht</h3>'+vk205Summary('Gewicht',r.weight,'kg','kg',1)+weightChart(period,r.weight,700,'all')}
+           if(sel('oxygen')){const oxy=vk204OxygenRows().filter(x=>between(x,from,to));out+='<h3>Blutsauerstoff & Perfusionsindex</h3>'+vk205Summary('SpO₂',oxy,'spo2','%',1)+vk204OxygenChart('spo2',period,oxy)+vk205Summary('PI',oxy,'pi','%',2)+vk204OxygenChart('pi',period,oxy)}
+           if(sel('asthma')){out+='<h3>Asthma</h3>'+vk205Summary('Peak-Flow',r.asthma,'peakFlow','l/min',0)+vkMiniTrend(r.asthma,'peakFlow','Peak-Flow','l/min',period)+vk205Summary('FEV1',r.asthma,'fev1Pct','%',1)+vkMiniTrend(r.asthma,'fev1Pct','FEV1','%',period)+vk205Summary('Atemnot',r.asthma,'breathlessness','/10',1)+vkMiniTrend(r.asthma,'breathlessness','Atemnot','/10',period)}
+           if(sel('hospital'))out+='<h3>Krankenhausaufenthalte</h3>'+vk205HospitalReport(from,to,true);
+
+          '''
+
+          start=app.index("if(sel('glucose'))",app.index('function vkAllTopicHtml('))
+          finish=app.index("if(sel('urology'))",start)
+          assert finish>start
+          app=app[:start]+pdf205+'\n '+app[finish:]
+          # Die anderen Berichtsteile wie Labor, Nachweise und Behandlungsdaten sind keine duplizierten Diagrammwerte.
+          # Punktbeschriftungen mit Ausweichpositionen; nicht genügend Platz -> Labels ausdünnen, nicht überlappen.
+          one('${path}${dots}${labels}</svg>', '${path}${dots}${vk205PointLabels(rows.map((r,i)=>({x:x(i),y:y(r.kg),v:r.kg})),W,H,L,R,T,B,1)}${labels}</svg>', 'Werte am Gewichtsdiagramm')
+          one('${path}${dots}<text x="${L}"', '${path}${dots}${vk205PointLabels(arr.map((r,i)=>({x:x(i),y:y(r[value]),v:r[value]})),W,H,L,R,T,B,1)}<text x="${L}"', 'Werte bei Asthma- und PSA-Kurven')
+          one('${lines}${ticks}</svg></div>${legend}', '${lines}${vk205PointLabels(rows.flatMap((r,i)=>series.map(s=>({x:x(i),y:y(s[3](r)),v:s[3](r)}))).filter(p=>Number.isFinite(p.v)),W,H,L,R,T,B,type===\'glucose\'?1:0)}${ticks}</svg></div>${legend}', 'Werte bei Blutdruck und Blutzucker')
+          one('${path}${dots}${ticks}</svg></div>${isSp?', '${path}${dots}${vk205PointLabels(rows.map((r,i)=>({x:xx(i),y:yy(r.value),v:r.value})),W,H,L,R,T,B,isSp?0:2)}${ticks}</svg></div>${isSp?', 'Werte bei Sauerstoff und PI')
+          # Monats/Jahres-PDF: keine Tabellen für Werte, die bereits als Diagramme dargestellt werden.
+          # Arztberichte zu Krankenhausaufenthalten enthalten nur Metadaten, nicht das gescannte Dokument.
+          # Schrift/Diagramme und Berichte werden vor GitHub-Commit getestet.
+
+          one("if(form.getAttribute('id')==='oxygen-form'){await vk204OxygenSubmit(f);return}", "if(form.getAttribute('id')==='oxygen-form'){await vk204OxygenSubmit(f);return}\nif(form.getAttribute('id')==='hospital-form'){await vk205HospitalSave(form);return}", 'Krankenhausformular-Submit')
+          one("if(action==='oxygen-reset'){renderMain();return}", "if(action==='oxygen-reset'){renderMain();return}\nif(action==='hospital-edit'){vk205HospitalEdit(el.dataset.id);return}\nif(action==='hospital-remove'){await vk205HospitalRemove(el.dataset.id);return}\nif(action==='hospital-view-file'){vk205HospitalView(el.dataset.id,el.dataset.index);return}\nif(action==='hospital-reset'){renderMain();return}", 'Krankenhaus Aktionen')
+          p.write_text(app,encoding='utf-8')
+          css='''\n/* VitalKompass 2.0.5: Blutsauerstoff und Perfusionsindex */
+          .vk204-last{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+          .vk204-last>div,.vk204-stat{border:1px solid #cddfeb;border-radius:12px;padding:14px;background:#f4f9fd;min-width:0}
+          .vk204-last span,.vk204-last strong,.vk204-last small,.vk204-stat span,.vk204-stat strong,.vk204-stat small{display:block}
+          .vk204-last span,.vk204-stat span{font-size:.95rem;font-weight:750;color:#395c74}
+          .vk204-last strong{font-size:1.8rem;margin:7px 0;color:#184968}
+          .vk204-last small,.vk204-stat small{font-size:.91rem;color:#3d6076;line-height:1.5}
+          .vk204-stat-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;margin:13px 0}
+          .vk204-stat strong{font-size:1.55rem;margin:6px 0;color:#124b72}
+          .vk204-level{display:inline-block;border-radius:9px;padding:4px 8px;font-weight:850}
+          .vk204-green{background:#e0f3e9!important;color:#126444!important}
+          .vk204-yellow{background:#fff2d5!important;color:#8b5300!important}
+          .vk204-red{background:#ffe5e7!important;color:#a01d32!important}
+          #oxygen-form input,#oxygen-form select{min-height:48px;font-size:16px}
+          #main[data-section="oxygen"] .panel{border-top:3px solid #1e8c87}
+          @media(max-width:520px){.vk204-last,.vk204-stat-grid{grid-template-columns:1fr}.vk204-last strong{font-size:1.55rem}}
+          @media print{#oxygen-form,.vk204-stat-grid+form{display:none!important}}
+          '''
+
+          css+=r'''
+          /* VitalKompass 2.0.5: Papierbericht, Labels und Dokumentenscans */
+          .vk205-summary{padding:9px 12px;background:#f2f8fc;border-left:4px solid #236f9e;border-radius:8px;font-size:1rem;line-height:1.65;margin:10px 0 13px;overflow-wrap:anywhere}
+          .vk205-summary strong{color:#164a70}
+          .vk205-stay{border:1px solid #c8dce8;border-radius:14px;padding:17px;margin:12px 0;background:#f8fcff;overflow-wrap:anywhere}
+          .vk205-stay h3{margin-bottom:8px;color:#16486d}
+          .vk205-scans{border:1px solid #b8d6e5;border-radius:13px;padding:15px;background:#f3faff;margin:15px 0}
+          .vk205-file-row{display:flex;flex-wrap:wrap;align-items:center;gap:9px;border-bottom:1px solid #dce9ef;padding:11px 0}
+          .vk205-file-row span{flex:1;min-width:130px;overflow-wrap:anywhere}
+          .vk205-file-row label{display:flex;gap:5px;align-items:center;font-size:.95rem}
+          .vk205-file-row input{width:20px;height:20px}
+          .vk205-preview{position:fixed;inset:0;background:#10283ef2;z-index:500;display:flex;flex-direction:column;gap:12px;padding:calc(15px + env(safe-area-inset-top)) 12px calc(15px + env(safe-area-inset-bottom));color:white}
+          .vk205-preview>div{display:flex;align-items:center;justify-content:space-between;gap:10px}
+          .vk205-preview>div strong{flex:1;overflow-wrap:anywhere}
+          .vk205-preview img{display:block;max-width:100%;min-height:0;max-height:100%;object-fit:contain;flex:1}
+          .vk205-preview iframe{width:100%;border:0;background:white;flex:1;min-height:0}
+          .vk205-preview pre{overflow:auto;background:white;color:#172d40;padding:15px;border-radius:10px;flex:1}
+          #hospital-form input,#hospital-form select,#hospital-form textarea{font-size:16px;min-height:48px}
+          #main[data-section="hospital"] .panel{border-top:3px solid #317d96}
+          @media print{.vk205-stay .actions,#hospital-form,.vk205-preview{display:none!important}}
+          '''
+          Path('style.css').write_text(Path('style.css').read_text(encoding='utf8')+css,encoding='utf8')
+          sw=Path('sw.js').read_text(encoding='utf8')
+          if 'vital-kompass-2.0.3-drawer-bmi-bsa' not in sw:raise RuntimeError('Offline-Cache nicht wie geprüft. Abbruch.')
+          sw=sw.replace('VitalKompass 2.0.3','VitalKompass 2.0.5').replace('vital-kompass-2.0.3-drawer-bmi-bsa','vital-kompass-2.0.5-oxygen-pi')
+          Path('sw.js').write_text(sw,encoding='utf8')
+          # Im PDF werden Diagramm-Werte bisher nur mit etwa 6 pt ausgegeben.
+          # Die Schriftgröße aus dem SVG respektieren und eine lesbare Untergrenze halten.
+          pdfpath=Path('pdf-export.js'); pdf=pdfpath.read_text(encoding='utf8')
+          pdfraw=pdf.encode('utf8')
+          pdfsha=hashlib.sha1(('blob '+str(len(pdfraw))+'\0').encode()+pdfraw).hexdigest()
+          if pdfsha!='a2677c37824fca7f8194fb2bbb80fa94f51e722c':
+              raise RuntimeError('PDF-Renderer wurde zwischenzeitlich verändert; kein unkontrollierter Ersatz.')
+          pdfold="const fs=8.5*scale+1.5;let tx=xx(el.getAttribute('x'));"
+          pdfnew="const svgSize=parseFloat(el.getAttribute('font-size'))||11;const fs=Math.max(8.0,Math.min(11.5,svgSize*scale+1.7));let tx=xx(el.getAttribute('x'));"
+          if pdf.count(pdfold)!=1:raise RuntimeError('PDF-Schriftgröße: unerwarteter Programmstand.')
+          pdfpath.write_text(pdf.replace(pdfold,pdfnew),encoding='utf8')
+          Path('version.json').write_text(json.dumps({'version':'2.0.5','released':'2026-10-29','notes':'SpO2 und PI mit getrennten Diagrammen, Krankenhausaufenthalte mit iPhone-Kamera- und PDF-Scan, kompakte Monats-/Jahresberichte mit Minimum/Mittelwert/Maximum statt doppelter Tabellen, überlappungsarme Diagrammbeschriftung, PDF-Auswahl, lokale verschlüsselte Daten und Offline-Modus.'},ensure_ascii=False,indent=2)+'\n',encoding='utf8')
+          readme=Path('README.md').read_text(encoding='utf8')
+          Path('README.md').write_text(readme+'''\n\n## VitalKompass 2.0.5 – Blutsauerstoff und Perfusionsindex\n- Neuer gemeinsamer Menüpunkt „Blutsauerstoff & Durchblutung (PI)“: SpO₂ in Prozent (Pflicht), PI in Prozent (optional), Datum/Uhrzeit, Messsituation (Raumluft/Sauerstoff), Notiz.\n- Werte lokal AES-GCM verschlüsselt; bearbeiten/löschen. Alter Datensatz und Passwortspeicher bleiben unverändert.\n- Zwei unabhängige SVG-Diagramme: Tag, letzte 7 Tage, Woche, Monat, Jahr, 10 Jahre; zeitliche Mittelwerte sind entsprechend gekennzeichnet.\n- SpO₂-Ampel dient der allgemeinen Orientierung (≥95, 93–94, ≤92 %); individuelle klinische Zielwerte können abweichen. PI ohne universelle Ampelschwellen.\n- Beide Werte in Monats-/Jahresstatistik und separat auswählbaren PDF-Berichten enthalten. PDF-Export ist unverschlüsselt; nur sicher speichern.\n- Vor dem Installieren Backup speichern, Safari-Website-Daten nicht löschen. Kein direkter Hardware-Datenaustausch.\n''',encoding='utf8')
+          Path('README.md').write_text(Path('README.md').read_text(encoding='utf8')+'''\n\n## VitalKompass 2.0.5 – Krankenhaus-Scans und kompakte Berichte\n- Krankenhausaufenthalte mit Aufnahme/Entlassung, Krankenhaus, Fachabteilung, Diagnosen, Behandlung, Nachsorge und iPhone-Kamerascan oder PDF-Upload. Originaldokumente bleiben verschlüsselt auf dem Gerät. Kein automatisches OCR.\n- Monats-/Jahresberichte: diagrammgestützte Messarten mit Minimum, Mittelwert und Maximum; keine doppelten Einzeltabellen.\n- Beschriftungen im SVG mit Kollisionsschutz und Ausdünnung bei vielen Messpunkten.\n- SpO₂ und PI im Bericht und PDF sowie Klinikaufenthalte als Berichtsthema.\n''',encoding='utf8')
+          print('VitalKompass 2.0.5 vorbereitet: SpO2, PI, Klinikscans und kompakte Berichte.')
+          PY_VK204
+      - name: Syntax, Grenzwerte und Datenintegritaet pruefen
+        shell: bash
+        run: |
+          node --check app.js
+          node --check sw.js
+          node --check pdf-export.js
+          python3 -m json.tool version.json >/dev/null
+          node - <<'NODE_VK204'
+          const assert=require('assert'),fs=require('fs'),vm=require('vm');
+          const app=fs.readFileSync('app.js','utf8'),css=fs.readFileSync('style.css','utf8'),sw=fs.readFileSync('sw.js','utf8');
+          function has(text,context=app){assert(context.includes(text),'Missing: '+text.slice(0,90))}
+          for(const s of ["const VERSION='2.0.5'","DB='vitalkompass-secure-v1'","oxygenLogs:[]","'oxygen','Blutsauerstoff & Durchblutung (PI)'","oxygen:pageOxygen","function pageOxygen()","function vk204OxygenSubmit(f)","function vk204OxygenEdit(entryId)","function vk204OxygenRemove(entryId)","function vk204OxygenValid(r)","function vk204OxygenChart(field","vk204OxygenStatsSection","if(sel('oxygen'))","if(action==='oxygen-edit')","if(action==='oxygen-remove')","if(action==='oxygen-reset')","if(form.getAttribute('id')==='oxygen-form')","Backup enthält ungültige SpO₂/PI-Messungen","chartPicker('oxygen')","oxygen:'month'","function statsHtml(){"]){has(s)}
+          has('.vk204-last',css);has('vital-kompass-2.0.5-oxygen-pi',sw);
+          assert(/data-view="glucose"[\s\S]*?Diabetes<\/button><button[^>]+data-view="urology"[\s\S]*?Prostata<\/button><button[^>]+data-view="bp"[\s\S]*?Blutdruck<\/button>/.test(app),'Bottom nav changed unexpectedly');
+          const start=app.indexOf('function vk204OxygenValid('),end=app.indexOf('function vk204OxygenRows()');
+          assert(start>0&&end>start,'Testable validation segment missing');
+          const unit=app.slice(start,end)+'\n;({vk204OxygenValid,vk204SpO2Level})';
+          const scope={dateValid:v=>/^2026-10-(0[1-9]|[12][0-9]|3[01])$/.test(v),today:()=> '2026-10-29',timeValid:v=>/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(v),Number};
+          const f=vm.runInNewContext(unit,scope),good={id:'test',date:'2026-10-29',time:'10:11',spo2:96,pi:3.21,situation:'room',note:'Test'};
+          for(const [changes,valid] of [ [{},true], [{pi:null},true], [{spo2:92},true], [{spo2:101},false], [{spo2:49},false], [{spo2:96.5},false], [{pi:0},false], [{pi:31},false], [{date:'2026-10-30'},false], [{time:'26:00'},false], [{situation:'mistake'},false], [{note:'x'.repeat(401)},false]]){
+           assert.equal(f.vk204OxygenValid({...good,...changes}),valid,'Value validation: '+JSON.stringify(changes).slice(0,50));
+          }
+          for(const [x,expected] of [[98,'green'],[95,'green'],[94,'yellow'],[93,'yellow'],[92,'red'],[88,'red']])assert.equal(f.vk204SpO2Level(x).level,expected,'SpO2 traffic '+x);
+          assert.equal(JSON.parse(fs.readFileSync('version.json','utf8')).version,'2.0.5');
+          assert(!app.includes("const VERSION='2.0.3'"));
+          assert(fs.readFileSync('pdf-export.js','utf8').includes('const fs=Math.max(8.0,Math.min(11.5,svgSize*scale+1.7))'),'PDF labels are not legible');
+
+          const checks205=["function pageHospital()","function vk205HospitalSave(form)","function vk205HospitalReport(from,to,showList=true)","function vk205HospitalValid(s)","function vk205PointLabels(points,W,H,L,R,T,B,decimals=1)","if(sel('hospital'))","hospitalStays:[]","hospital:pageHospital","hospital-edit","hospital-view-file","name=\"scan\"","name=\"files\"","if(form.getAttribute('id')==='hospital-form')","if(action==='hospital-view-file')","function statsHtml(){","Minimum","Durchschnitt","Maximum","vk205PointLabels(rows.map(","vk205PointLabels(arr.map("];
+          for(const x of checks205)assert(app.includes(x),'Missing 2.0.5: '+x);
+          assert(app.includes('const VERSION=\'2.0.5\''),'Wrong version');
+          assert(app.includes('DB=\'vitalkompass-secure-v1\''),'Encrypted storage key modified');
+          const sd=app.indexOf('function statsHtml(){'),se=app.indexOf('function pageStatsOld(){',sd),report=app.slice(sd,se);
+          assert(!report.includes('Messwerte (Auszug)'),'Redundant individual measurement table still present');
+          assert(!report.includes('weightReportBlock(w)'),'Redundant weight table still present');
+          assert(report.includes('vk205HospitalReport')&&report.includes("vk204OxygenChart('pi'"),'New measurements missing from statistics');
+          assert(app.includes("['hospital','Krankenhausaufenthalte','Aufenthalte und dokumentierte Befunde']"),'Hospital report selection missing');
+          console.log('2.0.5: Hospitalization and scanning, encrypted backup, min/mean/max, oxygen and PI, chart labels and PDF report integration tested.');
+          console.log('SUCCESS: Syntax, 3-button bottom nav, oxygen/PI save/edit/delete, all time periods, PDF, stats, backup validation and 18 SpO₂/PI unit checks.');
+          {
+          const begin=app.indexOf('/* VitalKompass 2.0.5: gut lesbare Berichte und Krankenhausaufenthalte. */');
+          const end=app.indexOf('function pageGlucose(){',begin);
+          assert(begin>0&&end>begin,'Hospital module must be included');
+          const moduleCode=app.slice(begin,end);
+          const context={
+            Number,Date,Math,Map,Set,Promise,console,
+            dateValid:s=>/^\d{4}-\d{2}-\d{2}$/.test(s)&&!Number.isNaN(Date.parse(s+'T12:00:00Z')),
+            timeValid:s=>/^([01]\d|2[0-3]):[0-5]\d$/.test(s),
+            today:()=> '2026-10-29', sortdate:(a,b)=>`${a.date}T${a.time}`.localeCompare(`${b.date}T${b.time}`),
+            h:s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'),
+            nf:(v,d=0)=>Number.isFinite(v)?v.toLocaleString('de-DE',{maximumFractionDigits:d}):'–',
+            avg:a=>a.reduce((n,x)=>n+x,0)/a.length,between:(x,a,b)=>x.date>=a&&x.date<=b,
+            vk201ValidateFile:f=>f&&typeof f.name==='string'&&f.size>=1&&f.size<=1572864&&typeof f.base64==='string',
+            vkReportTable:(labels,records)=>JSON.stringify(records),
+            VK201_LIMIT:1572864,
+            vk201BackupWithinLimit:s=>s.hospitalStays?.length<100,
+            FormData:class{constructor(form){this.form=form}get(k){return this.form.data[k]??null}getAll(k){return this.form.data[k]??[]}},
+            data:{hospitalStays:[]},id:()=> 'hospital-uuid',save:async()=>{context.saved++},renderMain:()=>{context.renders++},toast:()=>{},saved:0,renders:0,
+            confirm:()=>true,
+          };
+          vm.createContext(context);
+          vm.runInContext(moduleCode,context);
+          const valid=vm.runInContext('vk205HospitalValid',context);
+          const base={id:'h1',admitted:'2026-10-25',discharged:'2026-10-27',hospital:'Fachklinik',department:'Pneumologie',diagnosis:'Test',treatment:'Test',notes:'Test',files:[]};
+          assert(valid(base));
+          for(const variant of [{admitted:'2026-10-30'},{discharged:'2026-10-24'},{discharged:'2026-10-30'},{hospital:' '},{files:Array(5).fill({})},{diagnosis:'x'.repeat(1001)}])assert(!valid({...base,...variant}),JSON.stringify(variant).slice(0,80));
+          const overlap=vm.runInContext('vk205HospitalOverlap',context);
+          assert(overlap(base,'2026-10-26','2026-10-31'));
+          assert(!overlap(base,'2026-10-28','2026-10-31'));
+          const days=vm.runInContext('vk205HospitalDays',context);
+          assert.equal(days(base,'2026-10-25','2026-10-29'),3);
+          assert.equal(days(base,'2026-10-26','2026-10-26'),1);
+          assert.equal(days(base,'2026-10-28','2026-10-29'),0);
+          const labels=vm.runInContext('vk205PointLabels',context);
+          const near=Array.from({length:100},(_,i)=>({x:65+i*.6,y:160,v:95+i%3}));
+          const s=labels(near,720,295,50,20,20,48,0);
+          const count=(s.match(/<text /g)||[]).length;
+          assert(count>0&&count<25,`label collision reduction failed ${count}`);
+          assert(!s.includes('NaN'), 'Chart coordinate invalid');
+          (async()=>{
+            const create={data:{id:'',admitted:'2026-10-23',discharged:'2026-10-27',hospital:'Krankenhaus A',department:'Lunge',diagnosis:'Beobachtung',treatment:'Behandlung',notes:'',removeFile:[]},querySelectorAll:()=>[]};
+            await context.vk205HospitalSave(create);
+            assert.equal(context.data.hospitalStays.length,1);
+            assert.equal(context.saved,1);
+            const change={data:{...create.data,id:'hospital-uuid',hospital:'Klinik B'},querySelectorAll:()=>[]};
+            await context.vk205HospitalSave(change);
+            assert.equal(context.data.hospitalStays.length,1);
+            assert.equal(context.data.hospitalStays[0].hospital,'Klinik B');
+            assert.equal(context.saved,2);
+            const broken={data:{...create.data,id:'hospital-uuid',discharged:'2026-10-22'},querySelectorAll:()=>[]};
+            await assert.rejects(()=>context.vk205HospitalSave(broken));
+            assert.equal(context.saved,2);
+            await context.vk205HospitalRemove('hospital-uuid');
+            assert.equal(context.data.hospitalStays.length,0);
+            assert.equal(context.saved,3);
+            console.log('PASS: Krankenhaus-Validierung, Zeitraum, Tage, Erstellen, Ändern, Invaliditätsabbruch, Löschen, kollisionsarme Diagrammetiketten');
+          })().catch(e=>{console.error(e);process.exit(1)});
+          }
+          NODE_VK204
+      - name: Getestete App-Dateien gemeinsam veroeffentlichen
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.js style.css sw.js pdf-export.js version.json README.md
+          if git diff --cached --quiet; then
+            echo "Keine weiteren Aenderungen notwendig."
+            exit 0
+          fi
+          git commit -m "VitalKompass 2.0.5: SpO2, PI, Klinikscans und lesbare Berichte"
+          git push origin HEAD:main
