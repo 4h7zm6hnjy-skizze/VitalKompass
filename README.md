@@ -64,3 +64,12 @@ Installation: Unter Backup & Updates zuvor ein verschlüsseltes Backup erstellen
 - **Keine Änderung** am privaten Datenformat, der Verschlüsselung, gespeicherten Gesundheitswerten, der medizinischen Auswertungslogik oder der ESP32-Beta-Funktion.
 - Aktualisierung: Verschlüsseltes Backup außerhalb des Browsers aufbewahren, dann `app.js`, `style.css`, `sw.js`, `version.json`, `README.md` entpackt ins Stammverzeichnis hochladen.
 - Prüfung am echten iPhone weiterhin erforderlich.
+
+
+## VitalKompass 2.0.2 (29.10.2026) – 7 Tage und Ampel
+
+- Diagramme: Tag / Letzte 7 Tage / Woche / Monat / Jahr / 10 Jahre. Die rollierenden sieben Tage umfassen heute und die sechs vorigen Kalendertage; die Woche beginnt am Montag.
+- Punkte: grün im Orientierungs-/eigenen Referenzbereich, gelb auffällig, rot deutlich auffällig, grau nicht sicher einordenbar. Die Linienfarben bleiben zur Trennung von Messreihen erhalten.
+- Blutdruck, Puls und Blutzucker: bestehende Nutzergrenzen. Gewicht: grobe BMI-Orientierung nur für Erwachsene mit hinterlegter Körpergröße. Peak-Flow ohne persönlichen Bestwert bleibt grau. Laborwert-Ampel nur bei vorhandenen Laborreferenzgrenzen; kein universeller Wert wird erfunden.
+- Die Einordnung stellt keine Diagnose oder Entwarnung dar. Aggregierte Tages-/Wochen-/Monatspunkte sind Durchschnittswerte und können einzelne Extremwerte verdecken.
+- Keine Änderung am Datenmodell, Verschlüsselungsalgorithmus, vorhandenen Patientenwerten oder Berichtszeitraum. Vor dem Update extern ein verschlüsseltes Backup anlegen und Safari-Website-Daten keinesfalls löschen.

@@ -341,3 +341,13 @@ body{padding-bottom:calc(75px + env(safe-area-inset-bottom))}
 .vk201-feedback{color:#9e2937;font-weight:700;min-height:1em}
 @media(max-width:560px){.vk201-sheet .form-grid{grid-template-columns:1fr}.vk201-sheet{padding:13px}.vk201-sheet header{top:-12px}.vk201-actions{grid-template-columns:1fr}}
 @media print{.vk201-overlay{display:none!important}}
+
+/* VitalKompass 2.0.2: responsive Zeitraumwahl und medizinische Ampelmarkierungen */
+#main .chart-periods{gap:7px;margin-bottom:10px}
+#main .chart-periods button{min-height:42px;flex:1 1 auto}
+.vk-traffic-legend{display:flex;flex-wrap:wrap;gap:7px 15px;font-size:.84rem;font-weight:700;color:#284760;margin:10px 0 5px}
+.vk-traffic-legend span{display:inline-flex;align-items:center;gap:6px}
+.vk-traffic-indicator{width:11px;height:11px;border-radius:50%;display:inline-block;flex:none;border:1px solid #fff;box-shadow:0 0 0 1px #b5c4cf}
+.vk-traffic-green{background:#16805d}.vk-traffic-yellow{background:#b87910}.vk-traffic-red{background:#c22842}.vk-traffic-gray{background:#748392}
+.vk-traffic-disclaimer{font-size:.78rem;line-height:1.4;color:#52677b;margin:3px 0 10px}
+@media(max-width:540px){#main .chart-periods{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}#main .chart-periods button{font-size:.84rem;padding:9px 4px;border-radius:11px;min-width:0;white-space:normal}.vk-traffic-legend{gap:7px 10px}.vk-traffic-legend span{font-size:.77rem}}

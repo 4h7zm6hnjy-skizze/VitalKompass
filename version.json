@@ -1,5 +1,5 @@
 {
-  "version": "2.0.1",
-  "released": "2026-10-21",
-  "notes": "Nachträgliches Bearbeiten von Blutzucker, Blutdruck, Gewicht, Labor, Asthma und Urologie samt Datum, Uhrzeit, Messsituation, Werten, Notizen und verschlüsselten Anhängen (PDF/JPG/PNG/TXT). Datenerhalt, bestehender Tresor, PDF-Berichte und feste iPhone-Ansicht bleiben."
+  "version": "2.0.2",
+  "released": "2026-10-29",
+  "notes": "In allen Diagrammen rollierende Ansicht Letzte 7 Tage und Ampelfarben fuer Messpunkte. Vorhandene individuelle Grenzen und Referenzbereiche, keine Diagnose. Messdaten und Offlinebetrieb unveraendert."
 }
