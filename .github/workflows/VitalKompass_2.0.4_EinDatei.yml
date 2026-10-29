@@ -1,0 +1,219 @@
+name: VitalKompass 2.0.4 - Blutsauerstoff und PI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/VitalKompass_2.0.4_EinDatei.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vitalkompass-oxygen-204
+  cancel-in-progress: false
+
+jobs:
+  sicher-aktualisieren:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Repository laden
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: true
+      - name: Sichere Erweiterung der App-Dateien
+        shell: bash
+        run: |
+          python3 - <<'PY_VK204'
+          from pathlib import Path
+          import json,hashlib
+
+          BASE='bb6a48ac2afb17a2a8cf6fb7bde72fb2bea38980'
+          p=Path('app.js'); raw=p.read_bytes(); app=raw.decode('utf-8')
+          sha=hashlib.sha1(('blob '+str(len(raw))+'\0').encode()+raw).hexdigest()
+          if "const VERSION='2.0.4'" in app:
+              print('Version 2.0.4 ist bereits im Repository. Kein zweites Update.')
+              raise SystemExit(0)
+          if sha!=BASE:raise SystemExit('Geprüfte Quellversion 2.0.3 hat sich geändert ('+sha+'). Keine unsichere Überschreibung.')
+          if json.loads(Path('version.json').read_text())['version']!='2.0.3':raise SystemExit('Version stimmt nicht mit 2.0.3 überein. Abbruch.')
+
+          def one(old,new,label):
+              global app
+              cnt=app.count(old)
+              if cnt!=1: raise RuntimeError(label+': erwartet 1 Anker, gefunden '+str(cnt))
+              app=app.replace(old,new)
+
+          one("const VERSION='2.0.3'", "const VERSION='2.0.4'",'Versionsanzeige')
+          one("['asthma','Asthma-Tagebuch','♧'],['labs'", "['asthma','Asthma-Tagebuch','♧'],['oxygen','Blutsauerstoff & Durchblutung (PI)','◉'],['labs'",'Menü Blutsauerstoff')
+          one('asthma:pageAsthma,doctor:pageReportPlus','asthma:pageAsthma,oxygen:pageOxygen,doctor:pageReportPlus','Routen zu Bereichen')
+          one("asthma:'month',lab:'year'", "asthma:'month',oxygen:'month',lab:'year'",'Zeitfilter für Sauerstoff')
+          one('asthmaLogs:[],urologyLogs:[],medStocks:', 'asthmaLogs:[],urologyLogs:[],oxygenLogs:[],medStocks:', 'Leerer verschlüsselter Messdatensatz')
+          one("'weights','asthmaLogs','urologyLogs'])", "'weights','asthmaLogs','urologyLogs','oxygenLogs'])",'Altdaten-Migration')
+          one("['weight','Körpergewicht','Gewichtstagebuch und Diagramm'],['asthma'", "['weight','Körpergewicht','Gewichtstagebuch und Diagramm'],['oxygen','Blutsauerstoff & PI','SpO₂- und PI-Diagramme mit Messwerttabelle'],['asthma'",'PDF-Themenauswahl')
+          one("pageStatsOld()+panel('Asthma im Berichtszeitraum'", "pageStatsOld()+panel('Blutsauerstoff & Durchblutung (PI) – Diagramme',chartPicker('oxygen')+vk204OxygenChart('spo2',chartPeriods.oxygen)+vk204OxygenChart('pi',chartPeriods.oxygen))+panel('Asthma im Berichtszeitraum'",'Diagramme auf Statistikseite')
+          one('function statsHtml(){','function vk204OriginalStatsHtml(){','Statistikbericht erweitern')
+          one('function pageStatsOld(){', 'function statsHtml(){const [from,to]=statsRange();return vk204OriginalStatsHtml()+vk204OxygenStatsSection(vk204OxygenRows().filter(r=>between(r,from,to)),true)}\nfunction pageStatsOld(){','Statistik und PDF integrieren')
+          one("if(sel('asthma')){out+=", "if(sel('oxygen')){const oxygen=vk204OxygenRows().filter(x=>between(x,from,to));out+='<h3>Blutsauerstoff und Perfusionsindex</h3>'+vk204OxygenStatsSection(oxygen,false)+vk204OxygenChart('spo2','day',oxygen)+vk204OxygenChart('pi','day',oxygen)+vk204OxygenTable(oxygen,false)}\n if(sel('asthma')){out+=",'Einzel- und Gesamt-PDF')
+          one("if(!data)return;\nif(form.getAttribute('id')==='weight-goal-form')", "if(!data)return;\nif(form.getAttribute('id')==='oxygen-form'){await vk204OxygenSubmit(f);return}\nif(form.getAttribute('id')==='weight-goal-form')",'Speichervorgang')
+          one("async function doAction(el){const action=el.dataset.action;try{", "async function doAction(el){const action=el.dataset.action;try{\nif(action==='oxygen-edit'){vk204OxygenEdit(el.dataset.id);return}\nif(action==='oxygen-remove'){await vk204OxygenRemove(el.dataset.id);return}", 'Bearbeiten / Löschen')
+          one("if(x.urologyLogs!==undefined&&(!Array.isArray(x.urologyLogs)||x.urologyLogs.length>50000||!x.urologyLogs.every(vkUroValidate)))", "if(x.oxygenLogs!==undefined&&(!Array.isArray(x.oxygenLogs)||x.oxygenLogs.length>50000||!x.oxygenLogs.every(vk204OxygenValid)))throw Error('Backup enthält ungültige SpO₂/PI-Messungen.');\n if(x.urologyLogs!==undefined&&(!Array.isArray(x.urologyLogs)||x.urologyLogs.length>50000||!x.urologyLogs.every(vkUroValidate)))",'Backup-Datenvalidierung')
+
+          helpers=r'''/* VitalKompass 2.0.4: SpO₂ und Perfusionsindex im gemeinsamen Bereich. */
+          function vk204OxygenValid(r){
+           return !!r&&typeof r.id==='string'&&r.id.length>0&&dateValid(r.date)&&r.date<=today()&&timeValid(r.time)&&
+           Number.isInteger(r.spo2)&&r.spo2>=50&&r.spo2<=100&&
+           (r.pi===null||(Number.isFinite(r.pi)&&r.pi>=0.01&&r.pi<=30))&&
+           ['room','oxygen','unknown'].includes(r.situation)&&typeof r.note==='string'&&r.note.length<=400;
+          }
+          function vk204SpO2Level(value){
+           if(!Number.isFinite(value))return {level:'gray',label:'Kein Messwert'};
+           if(value<93)return {level:'red',label:'Niedriger Messwert – erneut prüfen und medizinisch abklären'};
+           if(value<95)return {level:'yellow',label:'Unter üblichem Orientierungsbereich – Verlauf und Symptome beachten'};
+           return {level:'green',label:'Im üblichen Erwachsenen-Orientierungsbereich (keine Entwarnung)'};
+          }
+          function vk204OxygenRows(){return [...(data.oxygenLogs||[])].filter(vk204OxygenValid).sort(sortdate)}
+          function vk204OxygenSituation(value){return ({room:'Raumluft',oxygen:'Mit Sauerstoffgabe',unknown:'Nicht angegeben'})[value]||'Nicht angegeben'}
+          function vk204OxygenStatsSection(rows,heading=true){
+           const values=rows.map(r=>r.spo2).filter(Number.isFinite),pis=rows.map(r=>r.pi).filter(Number.isFinite);
+           const s=values.length?{min:Math.min(...values),max:Math.max(...values),mean:avg(values)}:null;
+           const p=pis.length?{min:Math.min(...pis),max:Math.max(...pis),mean:avg(pis)}:null;
+           const counters={green:0,yellow:0,red:0};values.forEach(v=>{const c=vk204SpO2Level(v).level;if(c in counters)counters[c]++});
+           return `${heading?'<h3>Blutsauerstoff & Perfusionsindex (PI)</h3>':''}<div class="vk204-stat-grid"><div class="vk204-stat"><span>SpO₂-Messungen</span><strong>${values.length}</strong><small>Min ${s?nf(s.min):'–'} % · Mittel ${s?nf(s.mean,1):'–'} % · Max ${s?nf(s.max):'–'} %</small></div><div class="vk204-stat"><span>PI-Messungen</span><strong>${pis.length}</strong><small>Min ${p?nf(p.min,2):'–'} % · Mittel ${p?nf(p.mean,2):'–'} % · Max ${p?nf(p.max,2):'–'} %</small></div></div><p class="section-note">SpO₂-Ampel: ${counters.green} im allgemeinen Orientierungsbereich, ${counters.yellow} grenzwertig, ${counters.red} niedrig. Der PI erhält keine pauschale Ampelbewertung. Einzelwerte sind keine Diagnosen; Messfehler und individuelle ärztliche Zielwerte beachten.</p>`;
+          }
+          function vk204OxygenChart(field,period='month',override=null){
+           const oxygen=override||vk204OxygenRows();
+           const all=override?oxygen:oxygen.filter(r=>r.date>=chartMinDate(period)&&r.date<=today());
+           const keyOf=r=>chartBucket(r,period), buckets=new Map();
+           for(const r of all){const k=keyOf(r);if(!buckets.has(k))buckets.set(k,{date:r.date,time:r.time,_bucket:k,values:[]});const v=r[field];if(Number.isFinite(v))buckets.get(k).values.push(v)}
+           const rows=[...buckets.values()].filter(g=>g.values.length).map(g=>({...g,value:avg(g.values),count:g.values.length})).sort((a,b)=>a._bucket.localeCompare(b._bucket));
+           const isSp=field==='spo2',title=isSp?'Blutsauerstoff (SpO₂)':'Perfusionsindex (PI)',unit='%';
+           if(!rows.length)return `<p class="section-note">${title}: Für den gewählten Zeitraum liegen keine Messungen vor.</p>`;
+           const W=700,H=275,L=50,R=18,T=18,B=47,plotW=W-L-R,plotH=H-T-B;
+           const vals=rows.map(r=>r.value),lo=isSp?Math.max(50,Math.floor(Math.min(90,...vals)-4)):0;
+           const hi=isSp?100:Math.max(1,Math.ceil(Math.max(...vals)*1.2*10)/10);
+           const xx=i=>L+(rows.length===1?plotW/2:i*plotW/(rows.length-1));
+           const yy=v=>T+plotH-(v-lo)/(hi-lo)*plotH;
+           const grid=Array.from({length:5},(_,i)=>{const v=lo+(hi-lo)*i/4;return `<line x1="${L}" y1="${yy(v)}" x2="${W-R}" y2="${yy(v)}" stroke="#d8e4ef"/><text x="${L-6}" y="${yy(v)+4}" text-anchor="end" font-size="12" fill="#3d6077">${nf(v,isSp?0:2)}</text>`}).join('');
+           const thresholds=isSp?[93,95].filter(v=>v>=lo).map(v=>`<line x1="${L}" x2="${W-R}" y1="${yy(v)}" y2="${yy(v)}" stroke="${v===93?'#c22842':'#b87910'}" stroke-dasharray="6 5" stroke-width="2" opacity=".8"><title>Orientierung ${v}%</title></line>`).join(''):'';
+           const path=rows.length>1?`<polyline fill="none" stroke="${isSp?'#178377':'#2466a6'}" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" points="${rows.map((r,i)=>xx(i)+','+yy(r.value)).join(' ')}"/>`:'';
+           const dots=rows.map((r,i)=>{const level=isSp?vk204SpO2Level(r.value):{level:'blue',label:'PI: keine universelle medizinische Schwelle'};const col=isSp?VK_TRAFFIC_COLORS[level.level]:'#2466a6';const label=`${title} ${nf(r.value,2)} ${unit} · ${fmtDate(r.date)} · ${level.label}${r.count>1?' · Mittel aus '+r.count+' Messungen':''}`;return `<circle cx="${xx(i)}" cy="${yy(r.value)}" r="5.4" stroke="white" stroke-width="1.8" fill="${col}" tabindex="0" role="button" class="vk-chart-point" data-chart-info="${h(label)}"><title>${h(label)}</title></circle>`}).join('');
+           const tickPos=[0,Math.floor((rows.length-1)/2),rows.length-1].filter((v,i,a)=>a.indexOf(v)===i);
+           const ticks=tickPos.map(i=>`<text x="${xx(i)}" y="${H-15}" text-anchor="middle" font-size="12" fill="#365c70">${period==='ten'?h(rows[i]._bucket):fmtDate(rows[i].date)}</text>`).join('');
+           return `<div class="chartwrap"><svg class="chart" role="img" aria-label="${title}, ${rows.length} Messpunkte" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">${grid}${thresholds}${path}${dots}${ticks}</svg></div>${isSp?chartTrafficLegend():'<p class="section-note">PI in Prozent: Signalstärke der Durchblutung an der Messstelle. Keine allgemeingültigen Ampel-Grenzen; Gerät, Finger, Temperatur und Bewegung beeinflussen den Wert.</p>'}<p class="section-note">${title}: ${rows.length} Zeitpunkte${period==='day'?'':'; mehrere Messungen pro Zeitraum werden gemittelt'}. Für Trends Einzelwerte und Messumstände berücksichtigen.</p>`;
+          }
+          function vk204OxygenTable(rows,actions=true){
+           if(!rows.length)return '<p class="section-note">Noch keine SpO₂-/PI-Messungen vorhanden.</p>';
+           return `<div class="table-wrap"><table><thead><tr><th>Datum</th><th>SpO₂</th><th>PI</th><th>Messsituation / Notiz</th>${actions?'<th>Aktionen</th>':''}</tr></thead><tbody>${[...rows].reverse().slice(0,150).map(r=>`<tr><td>${fmtDate(r.date)} ${h(r.time)}</td><td><strong><span class="vk204-level vk204-${vk204SpO2Level(r.spo2).level}">${nf(r.spo2)} %</span></strong></td><td>${Number.isFinite(r.pi)?nf(r.pi,2)+' %':'–'}</td><td>${h(vk204OxygenSituation(r.situation))}${r.note?' · '+h(r.note):''}</td>${actions?`<td><button type="button" class="secondary" data-action="oxygen-edit" data-id="${h(r.id)}">Bearbeiten</button> <button type="button" class="dangerbutton" data-action="oxygen-remove" data-id="${h(r.id)}">Löschen</button></td>`:''}</tr>`).join('')}</tbody></table></div>`;
+          }
+          function pageOxygen(){
+           const rows=vk204OxygenRows(),latest=rows.at(-1),level=latest?vk204SpO2Level(latest.spo2):null;
+           const quick=latest?`<div class="vk204-last"><div><span>Letzter Blutsauerstoff</span><strong class="vk204-level vk204-${level.level}">${latest.spo2} %</strong><small>${h(level.label)}</small></div><div><span>Perfusionsindex (PI)</span><strong>${Number.isFinite(latest.pi)?nf(latest.pi,2)+' %':'Nicht angegeben'}</strong><small>${fmtDate(latest.date)} · ${h(latest.time)}</small></div></div>`:'<p class="section-note">Noch keine Messung eingetragen.</p>';
+           return tag('Blutsauerstoff & Durchblutung (PI)','SpO₂ und Perfusionsindex gemeinsam erfassen, getrennt auswerten und als PDF dokumentieren.')+
+           panel('Aktuelle Messung',quick)+
+           panel('Neue Messung eintragen',`<form id="oxygen-form"><input type="hidden" name="id" value=""><div class="form-grid"><label class="field"><span>Datum</span><input type="date" name="date" value="${today()}" required></label><label class="field"><span>Uhrzeit</span><input type="time" name="time" value="${nowTime()}" required></label><label class="field"><span>Blutsauerstoff SpO₂ (%)</span><input type="number" inputmode="numeric" name="spo2" min="50" max="100" step="1" required placeholder="z. B. 96"></label><label class="field"><span>Perfusionsindex PI (%) – optional</span><input type="number" inputmode="decimal" name="pi" min="0.01" max="30" step="0.01" placeholder="z. B. 3,20"></label><label class="field"><span>Messsituation</span><select name="situation"><option value="room">Raumluft</option><option value="oxygen">Mit Sauerstoffgabe</option><option value="unknown">Nicht angegeben</option></select></label><label class="field"><span>Messgerät, Beschwerden oder Notiz (optional)</span><input name="note" maxlength="400" placeholder="z. B. Ruhe, kalte Finger, nach Bewegung"></label></div><div class="actions"><button class="primary" type="submit" id="vk204-save">Messung speichern</button><button class="secondary" type="button" data-action="oxygen-reset">Bearbeitung abbrechen</button></div><p class="section-note">Die gespeicherten Werte werden ausschließlich lokal verschlüsselt abgelegt. Optionaler PI-Wert kann später ergänzt werden.</p></form>`)+
+           panel('Blutsauerstoff – Diagramm',chartPicker('oxygen')+vk204OxygenChart('spo2',chartPeriods.oxygen))+
+           panel('Durchblutungssignal PI – Diagramm',vk204OxygenChart('pi',chartPeriods.oxygen))+
+           panel('Statistik',vk204OxygenStatsSection(rows,false)+`<p class="section-note">Für Monats- und Jahresberichte „Statistiken“ öffnen. Über „Arztbericht / PDF“ lässt sich dieser Bereich auch einzeln auswählen und exportieren.</p>`)+
+           panel('Gespeicherte Messungen',vk204OxygenTable(rows))+
+           panel('Wie sind die Werte einzuordnen?',`<p><strong>SpO₂:</strong> Die Ampel nutzt allgemeine Orientierungsbereiche für Erwachsene (grün ≥95 %, gelb 93–94 %, rot ≤92 %). Bei chronischen Lungenerkrankungen können ärztlich festgelegte Zielwerte abweichen. Bei deutlich niedriger Messung in Ruhe erneut messen und zeitnah medizinisch abklären; bei schwerer Atemnot, Brustschmerz, Verwirrtheit oder blauen Lippen <strong>112</strong> rufen.</p><p><strong>PI:</strong> Der Perfusionsindex zeigt die relative Puls-Signalstärke an der Messstelle, keine direkte Messung der Durchblutung im ganzen Körper. Dafür gibt es keine universell gültigen Ampelgrenzen. Kalte Finger, Bewegung, Nagellack und Gerätequalität können beide Werte beeinflussen. Die App ersetzt kein Pulsoximeter und keine ärztliche Beurteilung.</p>`);
+          }
+          async function vk204OxygenSubmit(f){
+           const date=String(f.get('date')||''),time=String(f.get('time')||''),rawPi=String(f.get('pi')??'').trim();
+           const spo2=Number(f.get('spo2')),pi=rawPi===''?null:nval(rawPi),entryId=String(f.get('id')||'');
+           const item={id:entryId||id(),date,time,spo2,pi:pi===null?null:Math.round(pi*100)/100,situation:String(f.get('situation')||''),note:String(f.get('note')||'').slice(0,400)};
+           if(!vk204OxygenValid(item))throw Error('Datum, Uhrzeit, SpO₂ (50–100 %) und PI (0,01–30 %, optional) überprüfen.');
+           const before=data.oxygenLogs,existing=before.findIndex(r=>r.id===entryId);
+           if(entryId&&existing<0)throw Error('Der zu bearbeitende Messwert wurde nicht gefunden.');
+           const next=[...before];if(existing>=0)next[existing]=item;else next.push(item);
+           data.oxygenLogs=next;try{await save()}catch(e){data.oxygenLogs=before;throw e}
+           renderMain();toast('Blutsauerstoff und PI sicher gespeichert.');
+           if(spo2<=92)alert('SpO₂ niedrig: nach kurzer Ruhe und mit warmen Fingern erneut messen. Bei erneut niedrigem Wert medizinische Hilfe holen. Bei schwerer Atemnot, Brustschmerz, Verwirrtheit oder blauen Lippen 112. Ärztliche Zielbereiche können individuell abweichen.');
+          }
+          function vk204OxygenEdit(entryId){
+           const r=(data.oxygenLogs||[]).find(o=>o.id===entryId),form=$('#oxygen-form');if(!r||!form)throw Error('Messung oder Eingabeformular nicht gefunden.');
+           for(const name of ['id','date','time','spo2','situation','note'])form.elements[name].value=r[name]??'';
+           form.elements.pi.value=r.pi??'';
+           const save=$('#vk204-save');if(save)save.textContent='Änderungen speichern';
+           form.scrollIntoView({behavior:'smooth',block:'center'});form.elements.spo2.focus();
+          }
+          async function vk204OxygenRemove(entryId){
+           const before=data.oxygenLogs;if(!before.some(r=>r.id===entryId))throw Error('Messung nicht gefunden.');
+           if(!confirm('Diese SpO₂-/PI-Messung dauerhaft löschen?'))return;
+           data.oxygenLogs=before.filter(r=>r.id!==entryId);
+           try{await save()}catch(e){data.oxygenLogs=before;throw e}
+           renderMain();toast('Messung gelöscht.');
+          }
+          '''
+
+          one('function pageGlucose(){',helpers+'\nfunction pageGlucose(){','Modul SpO₂/PI')
+          one("if(action==='oxygen-remove'){await vk204OxygenRemove(el.dataset.id);return}", "if(action==='oxygen-remove'){await vk204OxygenRemove(el.dataset.id);return}\nif(action==='oxygen-reset'){renderMain();return}", 'Bearbeitung abbrechen')
+
+          p.write_text(app,encoding='utf-8')
+          css='''\n/* VitalKompass 2.0.4: Blutsauerstoff und Perfusionsindex */
+          .vk204-last{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+          .vk204-last>div,.vk204-stat{border:1px solid #cddfeb;border-radius:12px;padding:14px;background:#f4f9fd;min-width:0}
+          .vk204-last span,.vk204-last strong,.vk204-last small,.vk204-stat span,.vk204-stat strong,.vk204-stat small{display:block}
+          .vk204-last span,.vk204-stat span{font-size:.95rem;font-weight:750;color:#395c74}
+          .vk204-last strong{font-size:1.8rem;margin:7px 0;color:#184968}
+          .vk204-last small,.vk204-stat small{font-size:.91rem;color:#3d6076;line-height:1.5}
+          .vk204-stat-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;margin:13px 0}
+          .vk204-stat strong{font-size:1.55rem;margin:6px 0;color:#124b72}
+          .vk204-level{display:inline-block;border-radius:9px;padding:4px 8px;font-weight:850}
+          .vk204-green{background:#e0f3e9!important;color:#126444!important}
+          .vk204-yellow{background:#fff2d5!important;color:#8b5300!important}
+          .vk204-red{background:#ffe5e7!important;color:#a01d32!important}
+          #oxygen-form input,#oxygen-form select{min-height:48px;font-size:16px}
+          #main[data-section="oxygen"] .panel{border-top:3px solid #1e8c87}
+          @media(max-width:520px){.vk204-last,.vk204-stat-grid{grid-template-columns:1fr}.vk204-last strong{font-size:1.55rem}}
+          @media print{#oxygen-form,.vk204-stat-grid+form{display:none!important}}
+          '''
+          Path('style.css').write_text(Path('style.css').read_text(encoding='utf8')+css,encoding='utf8')
+          sw=Path('sw.js').read_text(encoding='utf8')
+          if 'vital-kompass-2.0.3-drawer-bmi-bsa' not in sw:raise RuntimeError('Offline-Cache nicht wie geprüft. Abbruch.')
+          sw=sw.replace('VitalKompass 2.0.3','VitalKompass 2.0.4').replace('vital-kompass-2.0.3-drawer-bmi-bsa','vital-kompass-2.0.4-oxygen-pi')
+          Path('sw.js').write_text(sw,encoding='utf8')
+          Path('version.json').write_text(json.dumps({'version':'2.0.4','released':'2026-10-29','notes':'Blutsauerstoff (SpO2) und Perfusionsindex (PI) in einem Menüpunkt. Gespeicherte Messwerte mit Bearbeiten/Löschen, getrennte Diagramme (Tag/7 Tage/Woche/Monat/Jahr/10 Jahre), Monats-/Jahresstatistiken, auswählbarer PDF-Bericht; Offline- und Verschlüsselungsmodus unverändert.'},ensure_ascii=False,indent=2)+'\n',encoding='utf8')
+          readme=Path('README.md').read_text(encoding='utf8')
+          Path('README.md').write_text(readme+'''\n\n## VitalKompass 2.0.4 – Blutsauerstoff und Perfusionsindex\n- Neuer gemeinsamer Menüpunkt „Blutsauerstoff & Durchblutung (PI)“: SpO₂ in Prozent (Pflicht), PI in Prozent (optional), Datum/Uhrzeit, Messsituation (Raumluft/Sauerstoff), Notiz.\n- Werte lokal AES-GCM verschlüsselt; bearbeiten/löschen. Alter Datensatz und Passwortspeicher bleiben unverändert.\n- Zwei unabhängige SVG-Diagramme: Tag, letzte 7 Tage, Woche, Monat, Jahr, 10 Jahre; zeitliche Mittelwerte sind entsprechend gekennzeichnet.\n- SpO₂-Ampel dient der allgemeinen Orientierung (≥95, 93–94, ≤92 %); individuelle klinische Zielwerte können abweichen. PI ohne universelle Ampelschwellen.\n- Beide Werte in Monats-/Jahresstatistik und separat auswählbaren PDF-Berichten enthalten. PDF-Export ist unverschlüsselt; nur sicher speichern.\n- Vor dem Installieren Backup speichern, Safari-Website-Daten nicht löschen. Kein direkter Hardware-Datenaustausch.\n''',encoding='utf8')
+          print('VitalKompass 2.0.4 vorbereitet: Blutsauerstoff & PI, Berichte und Diagramme.')
+          PY_VK204
+      - name: Syntax, Grenzwerte und Datenintegritaet pruefen
+        shell: bash
+        run: |
+          node --check app.js
+          node --check sw.js
+          python3 -m json.tool version.json >/dev/null
+          node - <<'NODE_VK204'
+          const assert=require('assert'),fs=require('fs'),vm=require('vm');
+          const app=fs.readFileSync('app.js','utf8'),css=fs.readFileSync('style.css','utf8'),sw=fs.readFileSync('sw.js','utf8');
+          function has(text,context=app){assert(context.includes(text),'Missing: '+text.slice(0,90))}
+          for(const s of ["const VERSION='2.0.4'","DB='vitalkompass-secure-v1'","oxygenLogs:[]","'oxygen','Blutsauerstoff & Durchblutung (PI)'","oxygen:pageOxygen","function pageOxygen()","function vk204OxygenSubmit(f)","function vk204OxygenEdit(entryId)","function vk204OxygenRemove(entryId)","function vk204OxygenValid(r)","function vk204OxygenChart(field","vk204OxygenStatsSection","if(sel('oxygen'))","if(action==='oxygen-edit')","if(action==='oxygen-remove')","if(action==='oxygen-reset')","if(form.getAttribute('id')==='oxygen-form')","Backup enthält ungültige SpO₂/PI-Messungen","chartPicker('oxygen')","oxygen:'month'","function statsHtml(){const [from,to]=statsRange();"]){has(s)}
+          has('.vk204-last',css);has('vital-kompass-2.0.4-oxygen-pi',sw);
+          assert(/data-view="glucose"[\s\S]*?Diabetes<\/button><button[^>]+data-view="urology"[\s\S]*?Prostata<\/button><button[^>]+data-view="bp"[\s\S]*?Blutdruck<\/button>/.test(app),'Bottom nav changed unexpectedly');
+          const start=app.indexOf('function vk204OxygenValid('),end=app.indexOf('function vk204OxygenRows()');
+          assert(start>0&&end>start,'Testable validation segment missing');
+          const unit=app.slice(start,end)+'\n;({vk204OxygenValid,vk204SpO2Level})';
+          const scope={dateValid:v=>/^2026-10-(0[1-9]|[12][0-9]|3[01])$/.test(v),today:()=> '2026-10-29',timeValid:v=>/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(v),Number};
+          const f=vm.runInNewContext(unit,scope),good={id:'test',date:'2026-10-29',time:'10:11',spo2:96,pi:3.21,situation:'room',note:'Test'};
+          for(const [changes,valid] of [ [{},true], [{pi:null},true], [{spo2:92},true], [{spo2:101},false], [{spo2:49},false], [{spo2:96.5},false], [{pi:0},false], [{pi:31},false], [{date:'2026-10-30'},false], [{time:'26:00'},false], [{situation:'mistake'},false], [{note:'x'.repeat(401)},false]]){
+           assert.equal(f.vk204OxygenValid({...good,...changes}),valid,'Value validation: '+JSON.stringify(changes).slice(0,50));
+          }
+          for(const [x,expected] of [[98,'green'],[95,'green'],[94,'yellow'],[93,'yellow'],[92,'red'],[88,'red']])assert.equal(f.vk204SpO2Level(x).level,expected,'SpO2 traffic '+x);
+          assert.equal(JSON.parse(fs.readFileSync('version.json','utf8')).version,'2.0.4');
+          assert(!app.includes("const VERSION='2.0.3'"));
+          console.log('SUCCESS: Syntax, 3-button bottom nav, oxygen/PI save/edit/delete, all time periods, PDF, stats, backup validation and 18 SpO₂/PI unit checks.');          NODE_VK204
+      - name: Getestete App-Dateien gemeinsam veroeffentlichen
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.js style.css sw.js version.json README.md
+          if git diff --cached --quiet; then
+            echo "Keine weiteren Aenderungen notwendig."
+            exit 0
+          fi
+          git commit -m "VitalKompass 2.0.4: Blutsauerstoff und Perfusionsindex mit Diagrammen und Statistik"
+          git push origin HEAD:main
