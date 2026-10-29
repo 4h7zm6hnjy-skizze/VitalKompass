@@ -73,3 +73,12 @@ Installation: Unter Backup & Updates zuvor ein verschlüsseltes Backup erstellen
 - Blutdruck, Puls und Blutzucker: bestehende Nutzergrenzen. Gewicht: grobe BMI-Orientierung nur für Erwachsene mit hinterlegter Körpergröße. Peak-Flow ohne persönlichen Bestwert bleibt grau. Laborwert-Ampel nur bei vorhandenen Laborreferenzgrenzen; kein universeller Wert wird erfunden.
 - Die Einordnung stellt keine Diagnose oder Entwarnung dar. Aggregierte Tages-/Wochen-/Monatspunkte sind Durchschnittswerte und können einzelne Extremwerte verdecken.
 - Keine Änderung am Datenmodell, Verschlüsselungsalgorithmus, vorhandenen Patientenwerten oder Berichtszeitraum. Vor dem Update extern ein verschlüsseltes Backup anlegen und Safari-Website-Daten keinesfalls löschen.
+
+
+## Version 2.0.3 – Slide-out-Menü und automatische Körpermaße
+
+- Menü oben links öffnet ein gruppiertes Seitenmenü; Bereiche sind groß beschriftet und durchsuchbar. Es schließt durch Auswahl, Schließen-Taste, den dunklen Hintergrund oder Escape.
+- Die untere Schnellnavigation zeigt nur Diabetes, Prostata, Blutdruck. Startseite bietet sechs häufig verwendete Aktionen, alle weiteren Punkte sind im Menü erreichbar.
+- BMI=Gewicht(kg)/Körpergröße(m)^2; Körperoberfläche nach Mosteller = Quadratwurzel aus (Größe(cm)×Gewicht(kg)/3600). Neueste gespeicherte Messung hat Vorrang vor dem Profilgewicht. Vorschau aktualisiert sich beim Tippen oder nach dem Speichern, speichert aber keine Werte selbst.
+- Vor Installation verschlüsseltes Backup erstellen. Safari-Websitedaten nicht löschen. Es werden nur öffentliche Programmdateien verändert, keine persönlichen Patientendaten.
+- Browser-Syntax und strukturelle Regressionen im GitHub-Workflow; echter iPhone-Safari-Test ist noch erforderlich.

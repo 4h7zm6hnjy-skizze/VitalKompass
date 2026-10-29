@@ -1,5 +1,5 @@
 {
-  "version": "2.0.2",
+  "version": "2.0.3",
   "released": "2026-10-29",
-  "notes": "In allen Diagrammen rollierende Ansicht Letzte 7 Tage und Ampelfarben fuer Messpunkte. Vorhandene individuelle Grenzen und Referenzbereiche, keine Diagnose. Messdaten und Offlinebetrieb unveraendert."
+  "notes": "Ausziehbares gruppiertes Menü, Suchfunktion, große lesbare Navigation, unten nur Diabetes/Prostata/Blutdruck. BMI und Körperoberfläche nach Mosteller mit live aktualisiertem Gewichtsrechner. Lokale Datenspeicherung und Offlinefähigkeit unverändert."
 }
