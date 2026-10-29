@@ -1,0 +1,220 @@
+name: VitalKompass 2.0.2 - Letzte 7 Tage und Ampel
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/VitalKompass_2.0.2_EinDatei.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vital-kompass-chart-202
+  cancel-in-progress: false
+
+jobs:
+  sichere-aktualisierung:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: true
+      - name: Eindeutige Quellbasis pruefen und App-Dateien vorbereiten
+        shell: bash
+        run: |
+          python3 - <<'PY_PATCH'
+          from pathlib import Path
+          import json,hashlib,re
+          BASE_SHA='d833b4af4d86cc4b69e9a575f80e571223952924'
+          base=Path('app.js').read_bytes()
+          sha=hashlib.sha1(('blob '+str(len(base))+'\0').encode()+base).hexdigest()
+          if sha!=BASE_SHA:
+              raise RuntimeError(f'App-Quellcode passt nicht zur geprüften Version 2.0.1: {sha}. Aus Sicherheitsgründen nicht geändert.')
+          p=Path('app.js'); app=base.decode('utf-8')
+          def rep(old,new,desc):
+              global app
+              count=app.count(old)
+              if count!=1: raise RuntimeError(f'Anker {desc}: {count} Treffer statt einem.')
+              app=app.replace(old,new)
+          def repl_line(prefix,replacement,desc):
+              global app
+              lines=app.splitlines(keepends=True)
+              hits=[i for i,l in enumerate(lines) if l.lstrip().startswith(prefix)]
+              if len(hits)!=1: raise RuntimeError(f'Zeilenanker {desc}: {len(hits)} Treffer')
+              lines[hits[0]]=replacement+'\n'
+              app=''.join(lines)
+          rep("const VERSION='2.0.1'", "const VERSION='2.0.2'",'Version')
+          rep("const CHART_PERIODS=[['day','Tag'],['week','Woche'],['month','Monat'],['year','Jahr'],['ten','10 Jahre']];",
+              "const CHART_PERIODS=[['day','Tag'],['last7','Letzte 7 Tage'],['week','Woche'],['month','Monat'],['year','Jahr'],['ten','10 Jahre']];",'Zeitraeume')
+          rep(" if(period==='day')return fmt(d);\n if(period==='week')", " if(period==='day')return fmt(d);\n if(period==='last7'){const x=new Date(y,m,day);x.setDate(x.getDate()-6);return fmt(x)}\n if(period==='week')", '7 Tage')
+          helpers=r'''
+          /* 2.0.2 Ampel: Orientierungswerte und vorhandene eigene Referenzen, keine Diagnose. */
+          const VK_TRAFFIC_COLORS={green:'#16805d',yellow:'#b87910',red:'#c22842',gray:'#748392'};
+          function chartTraffic(type,r,field=''){
+           const answer=(level,label)=>({level,label});
+           const gray=()=>answer('gray','Ohne sichere Einordnung');
+           const valid=k=>Number.isFinite(r?.[k]);
+           const limit=(name,fallback)=>Number.isFinite(Number(data?.settings?.[name]))?Number(data.settings[name]):fallback;
+           if(type==='glucose'){
+             if(!valid('mgdl'))return gray();
+             const v=r.mgdl,kind=r.period||'other';
+             const high=kind==='after'?limit('glucoseAfterHigh',180):(kind==='fasting'||kind==='before')?limit('glucoseFastingHigh',130):limit('glucoseOtherHigh',180);
+             if(v<70||v>=limit('glucoseCriticalHigh',250))return answer('red','Kritisch auffälliger Blutzucker – Wert prüfen und medizinisch abklären');
+             if(v>high||((kind==='fasting'||kind==='before')&&v<limit('glucoseFastingLow',80)))return answer('yellow','Außerhalb des eingestellten Blutzucker-Zielbereichs');
+             return answer('green','Im eingestellten Blutzucker-Orientierungsbereich');
+           }
+           if(['bp','bp-sys','bp-dia'].includes(type)){
+             const sys=(type==='bp'||type==='bp-sys')&&valid('sys')?r.sys:null;
+             const dia=(type==='bp'||type==='bp-dia')&&valid('dia')?r.dia:null;
+             if(sys===null&&dia===null)return gray();
+             if((sys!==null&&sys>=limit('bpCriticalSys',180))||(dia!==null&&dia>=limit('bpCriticalDia',110)))return answer('red','Sehr hoher Blutdruck – umgehend ärztlich abklären');
+             if((sys!==null&&(sys>=limit('bpHighSys',135)||sys<limit('bpLowSys',90)))||(dia!==null&&(dia>=limit('bpHighDia',85)||dia<limit('bpLowDia',60))))return answer('yellow','Außerhalb des eingestellten Blutdruck-Orientierungsbereichs');
+             return answer('green','Im eingestellten Blutdruck-Orientierungsbereich');
+           }
+           if(type==='pulse'){
+             if(!valid('pulse'))return gray();
+             const v=r.pulse;
+             if(v<limit('pulseCriticalLow',40)||v>=limit('pulseCriticalHigh',130))return answer('red','Sehr auffälliger Puls – Situation und Beschwerden prüfen');
+             if(v<limit('pulseLow',50)||v>limit('pulseHigh',100))return answer('yellow','Puls außerhalb des eingestellten Bereichs (Ruhe/Belastung beachten)');
+             return answer('green','Puls im eingestellten Orientierungsbereich');
+           }
+           if(type==='weight'){
+             const height=Number(data?.profile?.height),age=ageYears();
+             if(!valid('kg')||!Number.isFinite(height)||height<120||height>250||age===null||age<18)return gray();
+             const bmi=r.kg/((height/100)**2);
+             if(bmi<17||bmi>=35)return answer('red','BMI '+nf(bmi,1)+': deutlich außerhalb des allgemeinen Erwachsenen-Orientierungsbereichs');
+             if(bmi<18.5||bmi>=25)return answer('yellow','BMI '+nf(bmi,1)+': außerhalb des allgemeinen Erwachsenen-Orientierungsbereichs');
+             return answer('green','BMI '+nf(bmi,1)+': innerhalb des allgemeinen Erwachsenen-Orientierungsbereichs');
+           }
+           if(type==='breathlessness'){
+             if(!valid('breathlessness'))return gray();
+             return r.breathlessness>=7?answer('red','Stark angegebene Atemnot'):r.breathlessness>=3?answer('yellow','Mäßig angegebene Atemnot'):answer('green','Geringe oder keine angegebene Atemnot');
+           }
+           if(type==='fev1Pct'){
+             if(!valid('fev1Pct'))return gray();
+             return r.fev1Pct<50?answer('red','FEV1-Prozentwert deutlich vermindert – ärztlich einordnen'):r.fev1Pct<80?answer('yellow','FEV1-Prozentwert vermindert – ärztlich einordnen'):answer('green','FEV1-Prozentwert mindestens 80 % – keine Entwarnung ohne Kontext');
+           }
+           if(type==='lab'){
+             if(!valid('value')||r.comparator)return gray();
+             const lo=Number.isFinite(r?.low)?r.low:null,hi=Number.isFinite(r?.high)?r.high:null;
+             if(lo===null&&hi===null)return gray();
+             if((lo!==null&&r.value<lo)||(hi!==null&&r.value>hi))return answer('yellow','Außerhalb der zum Befund eingetragenen Laborreferenz');
+             return answer('green','Innerhalb der zum Befund eingetragenen Laborreferenz');
+           }
+           return gray();
+          }
+          function chartTrafficLegend(){
+           return '<div class="vk-traffic-legend" aria-label="Ampel zur Orientierung">'+
+           ['green','yellow','red','gray'].map((c,i)=>'<span><i class="vk-traffic-indicator vk-traffic-'+c+'"></i>'+['Im Orientierungsbereich','Auffällig / beachten','Deutlich auffällig','Nicht bewertbar'][i]+'</span>').join('')+
+           '</div><p class="vk-traffic-disclaimer">Ampelfarben dienen der Orientierung, sind keine Diagnose und keine Entwarnung. Gruppierte Werte sind Durchschnittswerte; auffällige Einzelwerte können darin verborgen bleiben. Maßgeblich sind ärztlich vereinbarte Grenzen und Beschwerden.</p>';
+          }
+          '''
+          rep('const CHART_PERIODS=',helpers+'\nconst CHART_PERIODS=','Ampel-Hilfsfunktionen')
+          repl_line('const dots=rows.map((r,i)=>',r''' const dots=rows.map((r,i)=>{const t=chartTraffic('weight',r,'kg');const desc=nf(r.kg,1)+' kg · '+fmtDate(r.date)+' '+(r.time||'')+' · '+t.label;return `<circle cx="${x(i)}" cy="${y(r.kg)}" r="5.1" tabindex="0" role="button" class="vk-chart-point" data-chart-info="${h(desc)}" fill="${VK_TRAFFIC_COLORS[t.level]}" stroke="white" stroke-width="1.6"><title>${h(desc)}${r._count>1?' · '+r._count+' Einträge':''}</title></circle>`}).join('');''','Gewicht')
+          rep('${path}${dots}${labels}</svg></div><div class="legend">','${path}${dots}${labels}</svg></div>${chartTrafficLegend()}<div class="legend">','Gewicht-Legende')
+          rep('Die Gewichtsmesslinie ist durchgezogen. Für einen verlässlichen Verlauf möglichst immer zur gleichen Tageszeit wiegen.','Die Gewichtsmesslinie ist durchgezogen; die Punkte haben BMI-Orientierungsfarben (nur bei vollständigen Erwachsenendaten). Für einen verlässlichen Verlauf möglichst immer zur gleichen Tageszeit wiegen.','Gewicht-Erklaerung')
+          rep('fünf Diagrammansichten.','sechs Diagrammansichten.','Gewicht-Seite')
+          repl_line('const dots=arr.map((r,i)=>',r''' const dots=arr.map((r,i)=>{const kind=value==='pulse'?'pulse':value==='breathlessness'?'breathlessness':value==='fev1Pct'?'fev1Pct':'peakFlow';const t=chartTraffic(kind,r,value);const desc=label+': '+nf(r[value],1)+' '+unit+' · '+fmtDate(r.date)+' · '+t.label;return `<circle class="vk-chart-point" tabindex="0" role="button" data-chart-info="${h(desc)}" cx="${x(i)}" cy="${y(r[value])}" r="5.2" fill="${VK_TRAFFIC_COLORS[t.level]}" stroke="#fff" stroke-width="1.4"><title>${h(desc)}</title></circle>`}).join('');''','Asthma-Mini-Trend')
+          rep('</svg></div><p class="section-note">${h(label)} · ${arr.length} Punkte','</svg></div>${chartTrafficLegend()}<p class="section-note">${h(label)} · ${arr.length} Punkte','Asthma-Legende')
+          repl_line('const lines=series.map(([code,label,col,getv])=>',r''' const lines=series.map(([code,label,col,getv])=>{const points=rows.map((e,i)=>({e,i,v:getv(e)})).filter(o=>Number.isFinite(o.v));const path=points.length>1?`<polyline points="${points.map(o=>`${x(o.i)},${y(o.v)}`).join(' ')}" fill="none" stroke="${col}" stroke-width="3.4" stroke-linejoin="round" stroke-linecap="round"/>`:'';const dots=points.map(o=>{const t=chartTraffic(type,o.e,code);const desc=label+' '+nf(o.v,1)+' · '+fmtDate(o.e.date)+' '+(o.e.time||'')+' · '+t.label+(o.e.verified!==true?' · noch ungeprüft':'');return `<circle cx="${x(o.i)}" cy="${y(o.v)}" r="5.2" tabindex="0" role="button" class="vk-chart-point" data-chart-info="${h(desc)}" fill="${o.e.verified===true?VK_TRAFFIC_COLORS[t.level]:'#fff'}" stroke="${o.e.verified===true?'#fff':VK_TRAFFIC_COLORS[t.level]}" stroke-width="${o.e.verified===true?'1.7':'2.9'}"><title>${h(desc)}</title></circle>`}).join('');return path+dots}).join('');''','Blutdruck/Blutzucker/Puls')
+          rep('if(!rows.length)return `<p class="section-note">Noch keine Messungen für diesen Zeitraum.</p>${legend}`;','if(!rows.length)return `<p class="section-note">Noch keine Messungen für diesen Zeitraum.</p>${legend}${chartTrafficLegend()}`;','leere Diagramme')
+          rep('if(!values.length)return `<p>Keine gültigen Werte verfügbar.</p>${legend}`;','if(!values.length)return `<p>Keine gültigen Werte verfügbar.</p>${legend}${chartTrafficLegend()}`;','ungueltige Messwerte')
+          rep('</svg></div>${legend}<p class="section-note">${rows.filter(r=>r.verified!==true).length?','</svg></div>${legend}${chartTrafficLegend()}<p class="section-note">${rows.filter(r=>r.verified!==true).length?','Diagrammlegende')
+          repl_line('const dots=labs.slice(-1000).map(',r''' const dots=labs.slice(-1000).map((o,i)=>{const t=chartTraffic('lab',o,'value');const desc=fmtDate(o.date)+': '+nf(o.value,2)+' '+(o.unit||'')+' · '+t.label+(o.verified===true?'':' · noch ungeprüft');return `<circle cx="${xx(i)}" cy="${yy(o.value)}" r="5.1" fill="${o.verified===true?VK_TRAFFIC_COLORS[t.level]:'#fff'}" stroke="${o.verified===true?'#fff':VK_TRAFFIC_COLORS[t.level]}" stroke-width="${o.verified===true?'1.4':'2.6'}"><title>${h(desc)}</title></circle>`}).join('');''','Laborpunkte')
+          rep('</svg></div><div class="legend" aria-label="Laborwertlinie durchgezogen">','</svg></div>${chartTrafficLegend()}<div class="legend" aria-label="Laborwertlinie durchgezogen">','Laborlegende')
+          rep('Laborwerte haben unterschiedliche Referenzbereiche; hier werden keine medizinischen Grenzlinien erfunden.','Laborwert-Ampel: grün nur innerhalb eingetragener Laborreferenz, gelb außerhalb, grau ohne Referenz; keine erfundenen Grenzlinien und keine automatische Diagnose.','Laborhinweis')
+          p.write_text(app,encoding='utf-8')
+          css=Path('style.css')
+          css.write_text(css.read_text(encoding='utf-8')+'''
+          /* VitalKompass 2.0.2: responsive Zeitraumwahl und medizinische Ampelmarkierungen */
+          #main .chart-periods{gap:7px;margin-bottom:10px}
+          #main .chart-periods button{min-height:42px;flex:1 1 auto}
+          .vk-traffic-legend{display:flex;flex-wrap:wrap;gap:7px 15px;font-size:.84rem;font-weight:700;color:#284760;margin:10px 0 5px}
+          .vk-traffic-legend span{display:inline-flex;align-items:center;gap:6px}
+          .vk-traffic-indicator{width:11px;height:11px;border-radius:50%;display:inline-block;flex:none;border:1px solid #fff;box-shadow:0 0 0 1px #b5c4cf}
+          .vk-traffic-green{background:#16805d}.vk-traffic-yellow{background:#b87910}.vk-traffic-red{background:#c22842}.vk-traffic-gray{background:#748392}
+          .vk-traffic-disclaimer{font-size:.78rem;line-height:1.4;color:#52677b;margin:3px 0 10px}
+          @media(max-width:540px){#main .chart-periods{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}#main .chart-periods button{font-size:.84rem;padding:9px 4px;border-radius:11px;min-width:0;white-space:normal}.vk-traffic-legend{gap:7px 10px}.vk-traffic-legend span{font-size:.77rem}}
+          ''',encoding='utf-8')
+          sw=Path('sw.js')
+          sw.write_text(sw.read_text(encoding='utf-8').replace('2.0.1','2.0.2').replace('vital-kompass-2.0.2-edit-attachments','vital-kompass-2.0.2-chart-traffic-last7'),encoding='utf-8')
+          vfile=Path('version.json')
+          vfile.write_text(json.dumps({'version':'2.0.2','released':'2026-10-29','notes':'In allen Diagrammen rollierende Ansicht Letzte 7 Tage und Ampelfarben fuer Messpunkte. Vorhandene individuelle Grenzen und Referenzbereiche, keine Diagnose. Messdaten und Offlinebetrieb unveraendert.'},ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          readme=Path('README.md')
+          readme.write_text(readme.read_text(encoding='utf-8')+'''
+
+          ## VitalKompass 2.0.2 (29.10.2026) – 7 Tage und Ampel
+
+          - Diagramme: Tag / Letzte 7 Tage / Woche / Monat / Jahr / 10 Jahre. Die rollierenden sieben Tage umfassen heute und die sechs vorigen Kalendertage; die Woche beginnt am Montag.
+          - Punkte: grün im Orientierungs-/eigenen Referenzbereich, gelb auffällig, rot deutlich auffällig, grau nicht sicher einordenbar. Die Linienfarben bleiben zur Trennung von Messreihen erhalten.
+          - Blutdruck, Puls und Blutzucker: bestehende Nutzergrenzen. Gewicht: grobe BMI-Orientierung nur für Erwachsene mit hinterlegter Körpergröße. Peak-Flow ohne persönlichen Bestwert bleibt grau. Laborwert-Ampel nur bei vorhandenen Laborreferenzgrenzen; kein universeller Wert wird erfunden.
+          - Die Einordnung stellt keine Diagnose oder Entwarnung dar. Aggregierte Tages-/Wochen-/Monatspunkte sind Durchschnittswerte und können einzelne Extremwerte verdecken.
+          - Keine Änderung am Datenmodell, Verschlüsselungsalgorithmus, vorhandenen Patientenwerten oder Berichtszeitraum. Vor dem Update extern ein verschlüsseltes Backup anlegen und Safari-Website-Daten keinesfalls löschen.
+          ''',encoding='utf-8')
+          print('VitalKompass 2.0.2 patched; five public files prepared.')
+          PY_PATCH
+      - name: JavaScript Syntax, Datenschutzanker und Ampeltests
+        shell: bash
+        run: |
+          node --check app.js
+          node --check sw.js
+          python3 -m json.tool version.json > /dev/null
+          node - <<'JS_CHECK'
+          'use strict';
+          const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+          const src=fs.readFileSync('app.js','utf8');
+          assert(src.includes("const VERSION='2.0.2'"));
+          assert(src.includes("['last7','Letzte 7 Tage']"));
+          const start=src.indexOf('const VK_TRAFFIC_COLORS='),end=src.indexOf('const CHART_PERIODS=');
+          assert(start>=0&&end>start);
+          const context={data:{profile:{height:'192'},settings:{glucoseFastingLow:80,glucoseFastingHigh:130,glucoseAfterHigh:180,glucoseOtherHigh:180,glucoseCriticalHigh:250,bpHighSys:135,bpHighDia:85,bpLowSys:90,bpLowDia:60,bpCriticalSys:180,bpCriticalDia:110,pulseLow:50,pulseHigh:100,pulseCriticalLow:40,pulseCriticalHigh:130}},ageYears:()=>38,nf:x=>String(x)};
+          vm.createContext(context);
+          vm.runInContext(src.slice(start,end)+'\nglobalThis.getTraffic=chartTraffic;',context);
+          const g=context.getTraffic;
+          for(const [name,type,value,result] of [
+           ['BP gruen','bp',{sys:121,dia:80},'green'],
+           ['BP gelb','bp',{sys:156,dia:92},'yellow'],
+           ['BP rot','bp',{sys:184,dia:115},'red'],
+           ['Glukose rot','glucose',{mgdl:67,period:'fasting'},'red'],
+           ['Glukose gruen','glucose',{mgdl:102,period:'fasting'},'green'],
+           ['Glukose nach Essen gelb','glucose',{mgdl:200,period:'after'},'yellow'],
+           ['Puls gelb','pulse',{pulse:105},'yellow'],
+           ['BMI rot','weight',{kg:130},'red'],
+           ['Peakflow grau','peakFlow',{peakFlow:300},'gray'],
+           ['Labor ohne Referenz grau','lab',{value:14,low:null,high:null},'gray'],
+           ['Labor gruen','lab',{value:8,low:5,high:10},'green'],
+           ['Labor gelb','lab',{value:12,low:5,high:10},'yellow'],
+           ['Labor mit comparator grau','lab',{value:12,low:5,high:10,comparator:'<'},'gray']
+          ]){assert.equal(g(type,value).level,result,name)}
+          const dstart=src.indexOf('function chartMinDate(period)'),dend=src.indexOf('function chartBucket(');
+          assert(dstart>=0&&dend>dstart);
+          vm.runInContext(src.slice(dstart,dend)+'\nglobalThis.getMinDate=chartMinDate;',context);
+          const past=context.getMinDate('last7');
+          const today=new Date().toLocaleDateString('sv-SE');
+          const diff=Math.round((new Date(today+'T12:00:00')-new Date(past+'T12:00:00'))/86400000);
+          assert.equal(diff,6,'Last7 must show today plus previous 6 calendar days');
+          assert(src.includes("chartTraffic('weight'"));
+          assert(src.includes("chartTraffic('lab'"));
+          assert(src.includes("chartTraffic(kind,r"));
+          assert(src.includes('chartTraffic(type,o.e'));
+          console.log('Alle 13 Ampel-Tests und Last-7-Tage-Test bestanden.');
+          JS_CHECK
+          grep -Fq "DB='vitalkompass-secure-v1'" app.js
+          grep -Fq "vital-kompass-2.0.2-chart-traffic-last7" sw.js
+      - name: Getestete Dateien gemeinsam veroeffentlichen
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.js style.css sw.js version.json README.md
+          if git diff --cached --quiet; then
+            echo 'Keine Aenderungen erforderlich.'
+          else
+            git commit -m 'VitalKompass 2.0.2: letzte 7 Tage und Ampel in Diagrammen'
+            git push origin HEAD:main
+          fi
