@@ -1,0 +1,159 @@
+name: VitalKompass 2.0.9 - Nuechtern-Filter reparieren
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/VitalKompass_2.0.9_Nuechtern_Filter_Fix.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vitalkompass-209-fasting-filter
+  cancel-in-progress: false
+
+jobs:
+  nuechtern-filter-reparieren:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Aktuellen Projektstand laden
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: true
+
+      - name: Versionsstand pruefen und nur den Filter korrigieren
+        shell: bash
+        run: |
+          python3 - <<'PY_VK209'
+          from pathlib import Path
+          import hashlib, json
+
+          app_file = Path('app.js')
+          sw_file = Path('sw.js')
+          version_file = Path('version.json')
+
+          def git_blob_sha(raw):
+              return hashlib.sha1(b'blob ' + str(len(raw)).encode() + b'\x00' + raw).hexdigest()
+
+          app_bytes = app_file.read_bytes()
+          app = app_bytes.decode('utf-8')
+          sw_bytes = sw_file.read_bytes()
+          sw = sw_bytes.decode('utf-8')
+          version_bytes = version_file.read_bytes()
+          version = json.loads(version_bytes)
+
+          # Wiederholter Upload darf keine Daten oder Programmdateien ueberschreiben.
+          if version.get('version') == '2.0.9' and "const VERSION='2.0.9'" in app:
+              assert "['all','fasting','before','after'].includes(choice)" in app, 'Nuechtern-Klick fehlt trotz Versionsnummer.'
+              assert "vital-kompass-2.0.9-fasting-filter-fix" in sw, 'Cache nicht aktuell.'
+              print('Version 2.0.9 ist bereits korrekt installiert; kein zweites Update.')
+              raise SystemExit(0)
+
+          baselines = {
+              'app.js': ('7d6691b1bcd0532add87adee4e8a1f5b8421f400', app_bytes),
+              'sw.js': ('6da681348fd8d9d60be03e08aaff786043792598', sw_bytes),
+              'version.json': ('0c07d6fb7348f933c14e78683957652f3ebe2fb8', version_bytes),
+          }
+          for filename, (expected, raw) in baselines.items():
+              actual = git_blob_sha(raw)
+              if actual != expected:
+                  raise RuntimeError(f'{filename}: unerwarteter Quellstand {actual}; sichere Installation abgebrochen.')
+          if version.get('version') != '2.0.8':
+              raise RuntimeError('Erwartet Version 2.0.8; Installation abgebrochen.')
+
+          def replace_once(value, original, replacement, label):
+              count = value.count(original)
+              if count != 1:
+                  raise RuntimeError(f'{label}: genau 1 Anker erwartet, {count} gefunden; Abbruch.')
+              return value.replace(original, replacement, 1)
+
+          # Tatsaechlich gefundener Bug: Der Button existiert bereits, ist aber
+          # in der Klick-Whitelist aus Versehen nicht zugelassen.
+          app = replace_once(app,
+              "if(['all','before','after'].includes(choice)){vk207GlucoseFilter=choice;renderMain()}",
+              "if(['all','fasting','before','after'].includes(choice)){vk207GlucoseFilter=choice;renderMain()}",
+              'Klickaktion Nüchtern')
+          app = replace_once(app, "const VERSION='2.0.8'", "const VERSION='2.0.9'", 'App-Versionsnummer')
+          # Vorhandene Filter, Diagramme, Zeitraeume und Zoombedienung bleiben erhalten.
+          for check in ["['all','Alle zusammen'],['fasting','Nüchtern'],['before','Vor dem Essen'],['after','Nach dem Essen']",
+                        "['last7','Letzte 7 Tage']", 'function vk207GlucoseChart(', 'function vk207OpenZoom(',
+                        "DB='vitalkompass-secure-v1'", '(selection===\'all\'||r.period===selection)']:
+              if check not in app:
+                  raise RuntimeError('Erwartete bestehende Funktion fehlt: ' + check)
+
+          sw = replace_once(sw,
+              'vital-kompass-2.0.8-fasting-last7',
+              'vital-kompass-2.0.9-fasting-filter-fix', 'Offline-Cache')
+          sw = replace_once(sw, 'VitalKompass 2.0.8:', 'VitalKompass 2.0.9:', 'Service-Worker-Kommentar')
+          version['version'] = '2.0.9'
+          version['released'] = '2026-10-31'
+          version['notes'] = ('Fehler behoben: Der sichtbare Filter Nüchtern reagiert auf Berührung. '
+             'Alle zusammen, Nüchtern, Vor/Nach dem Essen und Letzte 7 Tage bleiben erhalten. '
+             'Diagramm-Zoom und lokale verschlüsselte Patientendaten bleiben unverändert.')
+
+          app_file.write_text(app, encoding='utf-8')
+          sw_file.write_text(sw, encoding='utf-8')
+          version_file.write_text(json.dumps(version, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          print('Nuechtern-Klick repariert; keine Messdatenbank und keine gespeicherten Messwerte veraendert.')
+          PY_VK209
+
+      - name: JavaScript und Filteraktionen testen
+        shell: bash
+        run: |
+          node --check app.js
+          node --check sw.js
+          python3 -m json.tool version.json > /dev/null
+          node - <<'NODE_VK209'
+          'use strict';
+          const assert = require('node:assert/strict');
+          const fs = require('node:fs');
+          const app = fs.readFileSync('app.js','utf8');
+          const sw = fs.readFileSync('sw.js','utf8');
+          const version = JSON.parse(fs.readFileSync('version.json','utf8'));
+          assert.equal(version.version,'2.0.9');
+          assert(app.includes("const VERSION='2.0.9'"));
+          assert(app.includes("DB='vitalkompass-secure-v1'"));
+          assert(sw.includes('vital-kompass-2.0.9-fasting-filter-fix'));
+          assert(app.includes("['last7','Letzte 7 Tage']"));
+          assert(app.includes("['all','Alle zusammen'],['fasting','Nüchtern'],['before','Vor dem Essen'],['after','Nach dem Essen']"));
+          assert(app.includes('vk207OpenZoom('));
+          assert(app.includes("(selection==='all'||r.period===selection)"));
+
+          // Den echten Ausschnitt der Klick-Verarbeitung mit vier simulierten
+          // iPhone-Buttons ausfuehren, statt nur nach Stichwoertern zu suchen.
+          const start = app.indexOf("const gf=e.target.closest('[data-vk207-glucose]');");
+          const end = app.indexOf("const point=e.target.closest('[data-chart-info]');",start);
+          assert(start >= 0 && end > start,'Klickfunktion fehlt');
+          const code = app.slice(start,end);
+          const click = new Function('e','result',
+            "let vk207GlucoseFilter='all'; const renderMain=()=>{result.renders++};" +
+            code.replace('vk207GlucoseFilter=choice;renderMain()', 'result.selection=choice;renderMain()'));
+          for (const value of ['all','fasting','before','after']) {
+            const result = {selection:null,renders:0};
+            click({target:{closest:()=>({dataset:{vk207Glucose:value}})}},result);
+            assert.equal(result.selection,value,`Filter ${value} wird nicht aktiviert`);
+            assert.equal(result.renders,1,`Filter ${value} aktualisiert Diagramm nicht`);
+          }
+          const rejected={selection:null,renders:0};
+          click({target:{closest:()=>({dataset:{vk207Glucose:'invalid'}})}},rejected);
+          assert.equal(rejected.renders,0,'Unbekannter Filter darf nicht aktiviert werden');
+          console.log('Tests bestanden: alle vier Filter reagieren; ungueltige Auswahl ignoriert; Zoom/7 Tage/Datenschutz vorhanden.');
+          NODE_VK209
+          git diff --check
+
+      - name: Geprueftes Update veroeffentlichen
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.js sw.js version.json
+          if git diff --cached --quiet; then
+            echo "Keine neuen Aenderungen erforderlich."
+          else
+            git commit -m "VitalKompass 2.0.9: Nuechtern-Filter reagiert auf Klick"
+            git push origin HEAD:main
+          fi
