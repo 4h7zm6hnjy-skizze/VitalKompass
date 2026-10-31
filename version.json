@@ -1,5 +1,5 @@
 {
-  "version": "2.0.5",
-  "released": "2026-10-29",
-  "notes": "SpO2 und PI mit getrennten Diagrammen, Krankenhausaufenthalte mit iPhone-Kamera- und PDF-Scan, kompakte Monats-/Jahresberichte mit Minimum/Mittelwert/Maximum statt doppelter Tabellen, überlappungsarme Diagrammbeschriftung, PDF-Auswahl, lokale verschlüsselte Daten und Offline-Modus."
+  "version": "2.0.6",
+  "released": "2026-10-31",
+  "notes": "Nur gespeicherte Einzelwerte in Blutzucker-, Blutdruck- und Pulsdiagrammen; chronologisch verbundene Blutzucker-Messpunkte statt Kategorien mit Luecken, korrekte Messsituationsfarben. Keine Datenbank-Aenderung."
 }

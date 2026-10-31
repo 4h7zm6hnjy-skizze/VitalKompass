@@ -1,7 +1,7 @@
 /* VitalKompass v1.9.7 — lokal, keine externen Bibliotheken, keine Analytics */
 'use strict';
 (() => {
-const VERSION='2.0.5', DB='vitalkompass-secure-v1', STORE='safe', KEY='vault';
+const VERSION='2.0.6', DB='vitalkompass-secure-v1', STORE='safe', KEY='vault';
 const root=document.getElementById('root');
 const $=(q,scope=document)=>scope.querySelector(q);
 const $$=(q,scope=document)=>Array.from(scope.querySelectorAll(q));
@@ -340,7 +340,7 @@ function chartTrafficLegend(){
  '</div><p class="vk-traffic-disclaimer">Ampelfarben dienen der Orientierung, sind keine Diagnose und keine Entwarnung. Gruppierte Werte sind Durchschnittswerte; auffällige Einzelwerte können darin verborgen bleiben. Maßgeblich sind ärztlich vereinbarte Grenzen und Beschwerden.</p>';
 }
 
-const CHART_PERIODS=[['day','Tag'],['last7','Letzte 7 Tage'],['week','Woche'],['month','Monat'],['year','Jahr'],['ten','10 Jahre']];
+const CHART_PERIODS=[['day','Tag'],['week','Woche'],['month','Monat'],['year','Jahr'],['ten','10 Jahre']];
 let chartPeriods={glucose:'month',bp:'month','bp-sys':'month','bp-dia':'month',pulse:'month',weight:'month',asthma:'month',oxygen:'month',lab:'year'};
 function chartPicker(type){const active=chartPeriods[type]||'month';return `<div class="subnav chart-periods" role="group" aria-label="Ansichtszeitraum für ${h(type)}">${CHART_PERIODS.map(([v,label])=>`<button type="button" data-chart-period="${v}" data-chart-type="${type}" aria-pressed="${v===active}" class="${v===active?'active':''}">${label}</button>`).join('')}</div>`}
 function chartMinDate(period){const d=new Date(), y=d.getFullYear(),m=d.getMonth(),day=d.getDate(), fmt=x=>`${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`;
@@ -353,11 +353,10 @@ function chartMinDate(period){const d=new Date(), y=d.getFullYear(),m=d.getMonth
  return '0000-00-00';}
 function chartBucket(e,period){if(period==='ten')return e.date.slice(0,7);if(period==='year'){const date=new Date(e.date+'T12:00:00');date.setDate(date.getDate()-(date.getDay()+6)%7);return date.toLocaleDateString('sv-SE')}
  if(period==='day')return e.date+' '+(e.time||'00:00');return e.date;}
-function chartAggregate(rows,type,period){if(period==='day')return rows.slice(-300);
- const bucketMap=new Map();for(const e of rows){const periodKey=type==='glucose'?'|'+(e.period||'other'):'';const checkKey=e.verified===true?'|confirmed':'|unverified';const k=chartBucket(e,period)+periodKey+checkKey;
- if(!bucketMap.has(k))bucketMap.set(k,{date:chartBucket(e,period).slice(0,10),time:e.time||'00:00',period:e.period,verified:e.verified===true,sys:0,dia:0,pulse:0,mgdl:0,_counts:{sys:0,dia:0,pulse:0,mgdl:0},_bucket:chartBucket(e,period)});
- const b=bucketMap.get(k);b.verified=b.verified&&e.verified===true;for(const fld of ['sys','dia','pulse','mgdl'])if(Number.isFinite(e[fld])){b[fld]+=e[fld];b._counts[fld]++}}
- return [...bucketMap.values()].sort((a,b)=>a._bucket.localeCompare(b._bucket)).map(b=>{for(const fld of ['sys','dia','pulse','mgdl'])b[fld]=b._counts[fld]?b[fld]/b._counts[fld]:null;return b});}
+function chartAggregate(rows,type,period){
+ // Nur tatsaechlich gespeicherte Werte, unveraendert und chronologisch.
+ return [...rows].filter(r=>r&&typeof r.date==='string').sort(sortdate);
+}
 const recentItems=(rows,days)=>rows.filter(x=>x.date>=getWindowDate(days));
 const confirmed=x=>x.verified===true;
 const levelOrder={ok:0,watch:1,high:2,urgent:3};
@@ -1050,7 +1049,49 @@ if(type==='glucose'){const v=e.mgdl,hi=e.period==='after'?s.glucoseAfterHigh:e.p
 if(type==='bp'){if(e.sys>=180||e.dia>=110||e.sys>=s.bpCriticalSys||e.dia>=s.bpCriticalDia)return {label:'Sehr hoch – umgehend abklären',level:'critical'};if(e.sys<s.bpLowSys||e.dia<s.bpLowDia)return {label:'Niedrig – Beschwerden beachten',level:'low'};if(e.sys>=s.bpHighSys||e.dia>=s.bpHighDia)return {label:'Erhöht',level:'high'};return {label:'Im Orientierungsbereich',level:'good'};}
 if(type==='pulse'){if(!Number.isFinite(e.pulse))return {label:'Puls fehlt',level:'pending'};if(e.pulse<s.pulseCriticalLow||e.pulse>=s.pulseCriticalHigh)return {label:'Sehr auffällig – abklären',level:'critical'};if(e.pulse<s.pulseLow)return {label:'Niedrig – Symptome prüfen',level:'low'};if(e.pulse>s.pulseHigh)return {label:'Erhöht – Ruhe/Belastung prüfen',level:'high'};return {label:'Im Orientierungsbereich',level:'good'};}
 return {label:'',level:'pending'};}
-function lineChart(type,days='90',wide=700,preloaded=null){const source=preloaded||filtered(['pulse','bp-sys','bp-dia'].includes(type)?'bp':type);const period=preloaded?(reportPeriod==='year'?'year':'month'):(CHART_PERIODS.some(x=>x[0]===days)?days:(chartPeriods[type]||'month'));const minDate=chartMinDate(period);const relevant=preloaded?source:source.filter(x=>x.date>=minDate&&x.date<=today());const rows=chartAggregate(relevant,type,period);let series=type==='bp-sys'?[['sys','Systolisch',colors.sys,e=>e.sys]]:type==='bp-dia'?[['dia','Diastolisch',colors.dia,e=>e.dia]]:type==='glucose'?[['fasting',gLabels.fasting,colors.fasting,e=>e.period==='fasting'?e.mgdl:null],['before',gLabels.before,colors.before,e=>e.period==='before'?e.mgdl:null],['after',gLabels.after,colors.after,e=>e.period==='after'?e.mgdl:null],['other',gLabels.other,colors.other,e=>e.period==='other'?e.mgdl:null]]:type==='bp'?[['sys','Systolisch (mmHg)',colors.sys,e=>e.sys],['dia','Diastolisch (mmHg)',colors.dia,e=>e.dia]]:[['pulse','Puls (/Min.)',colors.pulse,e=>e.pulse]];
+
+/* VitalKompass 2.0.6: Diagramme zeigen ausschliesslich gespeicherte Originalmessungen. */
+function vk206GlucoseChart(days='month',wide=720,preloaded=null){
+ const period=preloaded!==null?(reportPeriod==='year'?'year':'month'):(CHART_PERIODS.some(x=>x[0]===days)?days:(chartPeriods.glucose||'month'));
+ const minDate=chartMinDate(period);
+ const source=preloaded!==null?preloaded:filtered('glucose');
+ // Keine Verdichtung, Mittelung, Interpolation oder kuenstlichen Messpunkte.
+ const rows=[...source].filter(r=>r&&
+  (r.type===undefined||r.type==='glucose')&&
+  typeof r.date==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(r.date)&&
+  Number.isFinite(r.mgdl)&&r.mgdl>0&&r.mgdl<=999&&
+  (preloaded!==null||(r.date>=minDate&&r.date<=today()))
+ ).sort(sortdate);
+ const thresholds=thresholdDefs('glucose');
+ const legend=`<div class="legend" aria-label="Eine durchgezogene Verlaufslinie und farbige Originalmesspunkte"><span><i class="solid-line" style="border-color:#184f83"></i>Durchgehender Verlauf (Originalmessungen)</span>${Object.keys(gLabels).map(k=>`<span><i style="display:inline-block;vertical-align:middle;width:12px;height:12px;border-radius:50%;background:${colors[k]};margin-right:8px"></i>${h(gLabels[k])}</span>`).join('')}${thresholds.map(([v,label,col])=>`<span><i class="dash" style="border-color:${col}"></i>${h(label)}: ${nf(v)} mg/dl (Referenz)</span>`).join('')}${rows.some(r=>r.verified!==true)?'<span><i class="open-dot"></i>Offener Punkt: Messung noch nicht bestätigt</span>':''}</div>`;
+ if(!rows.length)return `<p class="section-note">Keine gespeicherten Blutzucker-Einzelmessungen für diesen Zeitraum.</p>${legend}`;
+ const W=wide,H=300,L=52,R=22,T=23,B=47,plotW=W-L-R,plotH=H-T-B;
+ const values=rows.map(r=>r.mgdl);
+ let lo=Math.max(0,Math.floor((Math.min(...values)-17)/10)*10);
+ let hi=Math.ceil((Math.max(...values)+17)/10)*10;
+ if(hi-lo<50){const center=(lo+hi)/2;lo=Math.max(0,Math.floor((center-25)/10)*10);hi=Math.ceil((center+25)/10)*10}
+ if(hi<=lo)hi=lo+50;
+ const timestamps=rows.map(r=>Date.parse(`${r.date}T${/^\d{2}:\d{2}$/.test(r.time||'')?r.time:'12:00'}:00`));
+ const goodTimes=timestamps.every(Number.isFinite),first=goodTimes?timestamps[0]:0,last=goodTimes?timestamps.at(-1):0;
+ const x=i=>L+(rows.length===1?plotW/2:goodTimes&&last>first?plotW*(timestamps[i]-first)/(last-first):plotW*i/(rows.length-1));
+ const y=v=>T+plotH-(v-lo)/(hi-lo)*plotH;
+ const grid=Array.from({length:5},(_,i)=>{const v=lo+(hi-lo)*i/4;return `<line x1="${L}" y1="${y(v)}" x2="${W-R}" y2="${y(v)}" stroke="#d8e5ee"/><text x="${L-7}" y="${y(v)+4}" font-size="11" text-anchor="end" fill="#587184">${nf(v,0)}</text>`}).join('');
+ const guides=thresholds.filter(([v])=>v>=lo&&v<=hi).map(([v,label,col])=>`<line x1="${L}" y1="${y(v)}" x2="${W-R}" y2="${y(v)}" stroke="${col}" stroke-width="1.8" stroke-dasharray="7 5" opacity=".80"><title>${h(label)} ${nf(v)} mg/dl</title></line>`).join('');
+ const path=rows.length>1?`<polyline points="${rows.map((r,i)=>`${x(i)},${y(r.mgdl)}`).join(' ')}" fill="none" stroke="#184f83" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round"/>`:'';
+ const dots=rows.map((r,i)=>{
+  const category=Object.hasOwn(gLabels,r.period)?r.period:'other',color=colors[category];
+  const traffic=chartTraffic('glucose',r,category);
+  const label=`${gLabels[category]} · ${nf(r.mgdl,1)} mg/dl · ${fmtDate(r.date)} ${r.time||''} · ${traffic.label}${r.verified===true?' · bestätigt':' · noch nicht bestätigt'}${r.note?' · '+r.note:''}`;
+  return `<circle cx="${x(i)}" cy="${y(r.mgdl)}" r="5.2" fill="${r.verified===true?color:'#ffffff'}" stroke="${color}" stroke-width="${r.verified===true?'1.6':'2.6'}" tabindex="0" role="button" class="vk-chart-point" data-chart-info="${h(label)}"><title>${h(label)}</title></circle>`;
+ }).join('');
+ const indices=[0,Math.floor((rows.length-1)/2),rows.length-1].filter((v,i,a)=>a.indexOf(v)===i);
+ const ticks=indices.map(i=>`<text x="${x(i)}" y="${H-15}" text-anchor="${i===0?'start':i===rows.length-1?'end':'middle'}" font-size="11" fill="#587184">${fmtDate(rows[i].date)}</text>`).join('');
+ const labels=vk205PointLabels(rows.map((r,i)=>({x:x(i),y:y(r.mgdl),v:r.mgdl})),W,H,L,R,T,B,1);
+ const unverified=rows.filter(r=>r.verified!==true).length;
+ return `<div class="chartwrap"><svg class="chart" role="img" aria-label="Blutzucker: ${rows.length} gespeicherte Originalmessungen" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">${grid}${guides}<line x1="${L}" x2="${L}" y1="${T}" y2="${H-B}" stroke="#7996a9"/>${path}${dots}${labels}${ticks}</svg></div>${legend}<p class="section-note"><strong>${rows.length} echte Einzelmessung${rows.length===1?'':'en'}</strong> angezeigt${unverified?`; davon ${unverified} noch nicht bestätigt`:''}. Keine errechneten Zwischenwerte oder Mittelwerte im Diagramm. Jeder Punkt entspricht einem gespeicherten Eintrag mit Datum und Uhrzeit. ${rows.length===1?'Für eine Verlaufslinie sind mindestens zwei Messungen nötig. ':''}Die Farben kennzeichnen die Messsituation; die medizinische Bewertung steht in den Messdetails und der Liste. Grenzlinien außerhalb der sichtbaren Skala werden nicht eingezeichnet.</p>`;
+}
+
+function lineChart(type,days='90',wide=700,preloaded=null){if(type==='glucose')return vk206GlucoseChart(days,wide,preloaded);const source=preloaded||filtered(['pulse','bp-sys','bp-dia'].includes(type)?'bp':type);const period=preloaded?(reportPeriod==='year'?'year':'month'):(CHART_PERIODS.some(x=>x[0]===days)?days:(chartPeriods[type]||'month'));const minDate=chartMinDate(period);const relevant=preloaded?source:source.filter(x=>x.date>=minDate&&x.date<=today());const rows=chartAggregate(relevant,type,period);let series=type==='bp-sys'?[['sys','Systolisch',colors.sys,e=>e.sys]]:type==='bp-dia'?[['dia','Diastolisch',colors.dia,e=>e.dia]]:type==='glucose'?[['fasting',gLabels.fasting,colors.fasting,e=>e.period==='fasting'?e.mgdl:null],['before',gLabels.before,colors.before,e=>e.period==='before'?e.mgdl:null],['after',gLabels.after,colors.after,e=>e.period==='after'?e.mgdl:null],['other',gLabels.other,colors.other,e=>e.period==='other'?e.mgdl:null]]:type==='bp'?[['sys','Systolisch (mmHg)',colors.sys,e=>e.sys],['dia','Diastolisch (mmHg)',colors.dia,e=>e.dia]]:[['pulse','Puls (/Min.)',colors.pulse,e=>e.pulse]];
 const title=type==='glucose'?'Blutzucker in mg/dl':type==='bp'?'Blutdruck in mmHg':type==='bp-sys'?'Systolischer Blutdruck in mmHg':type==='bp-dia'?'Diastolischer Blutdruck in mmHg':'Puls pro Minute';const thresholds=thresholdDefs(type);const legend=`<div class="legend" aria-label="Farblegende: Messwerte durchgezogen, Referenzlinien gestrichelt">${series.map(([code,label,col])=>`<span><i class="solid-line" style="border-color:${col}"></i>${h(label)} (Messwerte)</span>`).join('')}${thresholds.map(([v,label,col])=>`<span><i class="dash" style="border-color:${col}"></i>${h(label)}: ${nf(v)} (Referenz)</span>`).join('')}${rows.some(r=>r.verified!==true)?'<span><i class="open-dot"></i>Offener Punkt: noch ungeprüft</span>':''}</div>`;
 if(!rows.length)return `<p class="section-note">Noch keine Messungen für diesen Zeitraum.</p>${legend}${chartTrafficLegend()}`;
 const W=wide,H=295,L=50,R=18,T=20,B=42,plotW=W-L-R,plotH=H-T-B,values=rows.flatMap(e=>series.map(s=>s[3](e)).filter(Number.isFinite));if(!values.length)return `<p>Keine gültigen Werte verfügbar.</p>${legend}${chartTrafficLegend()}`;
