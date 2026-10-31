@@ -1,5 +1,5 @@
 {
-  "version": "2.0.8",
+  "version": "2.0.9",
   "released": "2026-10-31",
-  "notes": "Blutzuckerfilter: Alle zusammen, Nüchtern, Vor dem Essen, Nach dem Essen. Letzte 7 Tage als zusaetzlicher Zeitraum in allen Diagrammen. Bestehende Zoombedienung und Originalmesswerte bleiben erhalten; keine Aenderung am verschluesselten Datenspeicher."
+  "notes": "Fehler behoben: Der sichtbare Filter Nüchtern reagiert auf Berührung. Alle zusammen, Nüchtern, Vor/Nach dem Essen und Letzte 7 Tage bleiben erhalten. Diagramm-Zoom und lokale verschlüsselte Patientendaten bleiben unverändert."
 }
