@@ -1,5 +1,5 @@
 {
-  "version": "2.0.6",
+  "version": "2.0.7",
   "released": "2026-10-31",
-  "notes": "Nur gespeicherte Einzelwerte in Blutzucker-, Blutdruck- und Pulsdiagrammen; chronologisch verbundene Blutzucker-Messpunkte statt Kategorien mit Luecken, korrekte Messsituationsfarben. Keine Datenbank-Aenderung."
+  "notes": "Blutzucker: Alle zusammen, Vor dem Essen oder Nach dem Essen filtern (Nuechtern/Sonstige nur in Alle); grosse Diagrammflaeche mit neun Skalenteilungen; Vollbildzoom mit 100–500 Prozent, Plus/Minus, Fingerbewegung und Pinch. Zoom in allen Diagrammen. Keine neuen Messwerte oder Datenbankeingriffe."
 }
