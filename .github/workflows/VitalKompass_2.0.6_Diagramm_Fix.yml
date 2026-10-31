@@ -1,0 +1,166 @@
+name: VitalKompass 2.0.6 - Originalmesswerte und Diagrammlinien
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/VitalKompass_2.0.6_Diagramm_Fix.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vitalkompass-206-diagramm-fix
+  cancel-in-progress: false
+
+jobs:
+  diagramme-korrigieren:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Projektdateien laden
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: true
+      - name: Vorhandenen Quellstand pruefen und Diagramm korrigieren
+        shell: bash
+        run: |
+          python3 - <<'PY_VK206'
+          from pathlib import Path
+          import hashlib,json
+          path=Path('app.js')
+          raw=path.read_bytes()
+          sha=hashlib.sha1(('blob '+str(len(raw))+'\0').encode()+raw).hexdigest()
+          app=raw.decode('utf8')
+          if "const VERSION='2.0.6'" in app:
+              print('2.0.6 ist bereits installiert. Keine Doppelinstallation.')
+              raise SystemExit(0)
+          if sha!='69a95733a4812ec4d12c820550b30a2c0fce3321':
+              raise RuntimeError('Unbekannte app.js-Quellversion ('+sha+'). Ohne Ueberschreiben abgebrochen.')
+          if json.loads(Path('version.json').read_text())['version']!='2.0.5':
+              raise RuntimeError('Version.json ist nicht 2.0.5, Abbruch.')
+          def one(old,new,label):
+              global app
+              if app.count(old)!=1:
+                  raise RuntimeError(label+': erwartet genau einen passenden Abschnitt, gefunden '+str(app.count(old)))
+              app=app.replace(old,new)
+          one("const VERSION='2.0.5'","const VERSION='2.0.6'",'Versionswechsel')
+          start=app.index('function chartAggregate(rows,type,period){')
+          end=app.index('\nconst recentItems=',start)
+          old=app[start:end]
+          if 'b[fld]/b._counts[fld]' not in old:
+              raise RuntimeError('Aggregation wurde unerwartet geaendert.')
+          app=app[:start]+"function chartAggregate(rows,type,period){\n // Nur tatsaechlich gespeicherte Werte, unveraendert und chronologisch.\n return [...rows].filter(r=>r&&typeof r.date==='string').sort(sortdate);\n}"+app[end:]
+          helper=r'''
+          /* VitalKompass 2.0.6: Diagramme zeigen ausschliesslich gespeicherte Originalmessungen. */
+          function vk206GlucoseChart(days='month',wide=720,preloaded=null){
+           const period=preloaded!==null?(reportPeriod==='year'?'year':'month'):(CHART_PERIODS.some(x=>x[0]===days)?days:(chartPeriods.glucose||'month'));
+           const minDate=chartMinDate(period);
+           const source=preloaded!==null?preloaded:filtered('glucose');
+           // Keine Verdichtung, Mittelung, Interpolation oder kuenstlichen Messpunkte.
+           const rows=[...source].filter(r=>r&&
+            (r.type===undefined||r.type==='glucose')&&
+            typeof r.date==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(r.date)&&
+            Number.isFinite(r.mgdl)&&r.mgdl>0&&r.mgdl<=999&&
+            (preloaded!==null||(r.date>=minDate&&r.date<=today()))
+           ).sort(sortdate);
+           const thresholds=thresholdDefs('glucose');
+           const legend=`<div class="legend" aria-label="Eine durchgezogene Verlaufslinie und farbige Originalmesspunkte"><span><i class="solid-line" style="border-color:#184f83"></i>Durchgehender Verlauf (Originalmessungen)</span>${Object.keys(gLabels).map(k=>`<span><i style="display:inline-block;vertical-align:middle;width:12px;height:12px;border-radius:50%;background:${colors[k]};margin-right:8px"></i>${h(gLabels[k])}</span>`).join('')}${thresholds.map(([v,label,col])=>`<span><i class="dash" style="border-color:${col}"></i>${h(label)}: ${nf(v)} mg/dl (Referenz)</span>`).join('')}${rows.some(r=>r.verified!==true)?'<span><i class="open-dot"></i>Offener Punkt: Messung noch nicht bestätigt</span>':''}</div>`;
+           if(!rows.length)return `<p class="section-note">Keine gespeicherten Blutzucker-Einzelmessungen für diesen Zeitraum.</p>${legend}`;
+           const W=wide,H=300,L=52,R=22,T=23,B=47,plotW=W-L-R,plotH=H-T-B;
+           const values=rows.map(r=>r.mgdl);
+           let lo=Math.max(0,Math.floor((Math.min(...values)-17)/10)*10);
+           let hi=Math.ceil((Math.max(...values)+17)/10)*10;
+           if(hi-lo<50){const center=(lo+hi)/2;lo=Math.max(0,Math.floor((center-25)/10)*10);hi=Math.ceil((center+25)/10)*10}
+           if(hi<=lo)hi=lo+50;
+           const timestamps=rows.map(r=>Date.parse(`${r.date}T${/^\d{2}:\d{2}$/.test(r.time||'')?r.time:'12:00'}:00`));
+           const goodTimes=timestamps.every(Number.isFinite),first=goodTimes?timestamps[0]:0,last=goodTimes?timestamps.at(-1):0;
+           const x=i=>L+(rows.length===1?plotW/2:goodTimes&&last>first?plotW*(timestamps[i]-first)/(last-first):plotW*i/(rows.length-1));
+           const y=v=>T+plotH-(v-lo)/(hi-lo)*plotH;
+           const grid=Array.from({length:5},(_,i)=>{const v=lo+(hi-lo)*i/4;return `<line x1="${L}" y1="${y(v)}" x2="${W-R}" y2="${y(v)}" stroke="#d8e5ee"/><text x="${L-7}" y="${y(v)+4}" font-size="11" text-anchor="end" fill="#587184">${nf(v,0)}</text>`}).join('');
+           const guides=thresholds.filter(([v])=>v>=lo&&v<=hi).map(([v,label,col])=>`<line x1="${L}" y1="${y(v)}" x2="${W-R}" y2="${y(v)}" stroke="${col}" stroke-width="1.8" stroke-dasharray="7 5" opacity=".80"><title>${h(label)} ${nf(v)} mg/dl</title></line>`).join('');
+           const path=rows.length>1?`<polyline points="${rows.map((r,i)=>`${x(i)},${y(r.mgdl)}`).join(' ')}" fill="none" stroke="#184f83" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round"/>`:'';
+           const dots=rows.map((r,i)=>{
+            const category=Object.hasOwn(gLabels,r.period)?r.period:'other',color=colors[category];
+            const traffic=chartTraffic('glucose',r,category);
+            const label=`${gLabels[category]} · ${nf(r.mgdl,1)} mg/dl · ${fmtDate(r.date)} ${r.time||''} · ${traffic.label}${r.verified===true?' · bestätigt':' · noch nicht bestätigt'}${r.note?' · '+r.note:''}`;
+            return `<circle cx="${x(i)}" cy="${y(r.mgdl)}" r="5.2" fill="${r.verified===true?color:'#ffffff'}" stroke="${color}" stroke-width="${r.verified===true?'1.6':'2.6'}" tabindex="0" role="button" class="vk-chart-point" data-chart-info="${h(label)}"><title>${h(label)}</title></circle>`;
+           }).join('');
+           const indices=[0,Math.floor((rows.length-1)/2),rows.length-1].filter((v,i,a)=>a.indexOf(v)===i);
+           const ticks=indices.map(i=>`<text x="${x(i)}" y="${H-15}" text-anchor="${i===0?'start':i===rows.length-1?'end':'middle'}" font-size="11" fill="#587184">${fmtDate(rows[i].date)}</text>`).join('');
+           const labels=vk205PointLabels(rows.map((r,i)=>({x:x(i),y:y(r.mgdl),v:r.mgdl})),W,H,L,R,T,B,1);
+           const unverified=rows.filter(r=>r.verified!==true).length;
+           return `<div class="chartwrap"><svg class="chart" role="img" aria-label="Blutzucker: ${rows.length} gespeicherte Originalmessungen" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">${grid}${guides}<line x1="${L}" x2="${L}" y1="${T}" y2="${H-B}" stroke="#7996a9"/>${path}${dots}${labels}${ticks}</svg></div>${legend}<p class="section-note"><strong>${rows.length} echte Einzelmessung${rows.length===1?'':'en'}</strong> angezeigt${unverified?`; davon ${unverified} noch nicht bestätigt`:''}. Keine errechneten Zwischenwerte oder Mittelwerte im Diagramm. Jeder Punkt entspricht einem gespeicherten Eintrag mit Datum und Uhrzeit. ${rows.length===1?'Für eine Verlaufslinie sind mindestens zwei Messungen nötig. ':''}Die Farben kennzeichnen die Messsituation; die medizinische Bewertung steht in den Messdetails und der Liste. Grenzlinien außerhalb der sichtbaren Skala werden nicht eingezeichnet.</p>`;
+          }
+          '''
+          one("function lineChart(type,days='90',wide=700,preloaded=null){",helper+"\nfunction lineChart(type,days='90',wide=700,preloaded=null){if(type==='glucose')return vk206GlucoseChart(days,wide,preloaded);",'Blutzucker-Routing')
+          one("['day','Tag'],['last7','Letzte 7 Tage'],['week','Woche']","['day','Tag'],['week','Woche']",'Zeitraeume wie gewuenscht')
+          if "DB='vitalkompass-secure-v1'" not in app:raise RuntimeError('Datenbankkennung veraendert.')
+          path.write_text(app,encoding='utf8')
+          swp=Path('sw.js');sw=swp.read_text(encoding='utf8')
+          if "const CACHE='vital-kompass-2.0.5-oxygen-pi';" not in sw:raise RuntimeError('Cacheversion unerwartet.')
+          sw=sw.replace('VitalKompass 2.0.5','VitalKompass 2.0.6').replace('vital-kompass-2.0.5-oxygen-pi','vital-kompass-2.0.6-original-glucose-lines')
+          swp.write_text(sw,encoding='utf8')
+          version={'version':'2.0.6','released':'2026-10-31','notes':'Nur gespeicherte Einzelwerte in Blutzucker-, Blutdruck- und Pulsdiagrammen; chronologisch verbundene Blutzucker-Messpunkte statt Kategorien mit Luecken, korrekte Messsituationsfarben. Keine Datenbank-Aenderung.'}
+          Path('version.json').write_text(json.dumps(version,ensure_ascii=False,indent=2)+'\n',encoding='utf8')
+          print('Quellcode vorbereitet; verschluesselter Messwertspeicher bleibt unveraendert.')
+          PY_VK206
+      - name: JavaScript, Originalwerte und Datenschutz testen
+        shell: bash
+        run: |
+          node --check app.js
+          node --check sw.js
+          python3 -m json.tool version.json >/dev/null
+          node - <<'NODE_VK206'
+          const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+          const src=fs.readFileSync('app.js','utf8');
+          assert(src.includes("const VERSION='2.0.6'"));
+          assert(src.includes("DB='vitalkompass-secure-v1'"));
+          assert(src.includes('return vk206GlucoseChart(days,wide,preloaded)'));
+          assert(src.includes('return [...rows].filter(r=>r&&typeof r.date'));
+          assert(!src.includes("['last7','Letzte 7 Tage']"));
+          const begin=src.indexOf('function vk206GlucoseChart('),end=src.indexOf('function lineChart(',begin);
+          assert(begin>0&&end>begin);
+          const deps={
+            filtered:()=>[
+             {type:'glucose',date:'2026-10-29',time:'08:30',mgdl:128,period:'fasting',verified:true,note:''},
+             {type:'glucose',date:'2026-10-29',time:'14:24',mgdl:129,period:'after',verified:true,note:''},
+             {type:'glucose',date:'2026-10-30',time:'16:49',mgdl:91,period:'after',verified:false,note:''}],
+            CHART_PERIODS:[['day','Tag'],['week','Woche'],['month','Monat'],['year','Jahr'],['ten','10 Jahre']],
+            chartPeriods:{glucose:'month'},reportPeriod:'month',
+            chartMinDate:()=> '2026-10-01',today:()=> '2026-10-31',sortdate:(a,b)=>(a.date+a.time).localeCompare(b.date+b.time),
+            thresholdDefs:()=>[[70,'Niedrig','#00f'],[130,'Grenze','#090'],[180,'hoch','#f90']],
+            gLabels:{fasting:'Nüchtern',before:'Vor dem Essen',after:'Nach dem Essen',other:'Sonstige'},
+            colors:{fasting:'#123456',before:'#234567',after:'#345678',other:'#456789'},
+            h:x=>String(x).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'),
+            nf:(x,d=0)=>String(Number(x).toFixed(d)).replace(/\.0$/,''),
+            fmtDate:x=>x.split('-').reverse().join('.'),chartTraffic:()=>({label:'Information'}),vk205PointLabels:()=>''
+          };
+          const ctx={...deps,Date,Number,Math,Object,Array};vm.createContext(ctx);
+          vm.runInContext(src.slice(begin,end)+'\nthis.render=vk206GlucoseChart;',ctx);
+          const html=ctx.render('month',720);
+          assert.equal((html.match(/<circle /g)||[]).length,3,'Nur Originalpunkte');
+          assert.equal((html.match(/<polyline /g)||[]).length,1,'Eine echte Verlaufslinie');
+          for(const x of ['128 mg/dl','129 mg/dl','91 mg/dl'])assert(html.includes(x),'Originalwert fehlt: '+x);
+          assert(!html.includes('128,5'),'Kuenstlicher Mittelwert');
+          assert(html.includes('3 echte Einzelmessungen'));
+          assert(ctx.render('month',720,[]).includes('Keine gespeicherten Blutzucker-Einzelmessungen'));
+          assert.equal((ctx.render('month',720,deps.filtered().slice(0,1)).match(/<polyline /g)||[]).length,0);
+          const original=ctx.render('month',720,[]);assert(!original.includes('mg/dl · 28.10.2026'));
+          assert.equal(JSON.parse(fs.readFileSync('version.json')).version,'2.0.6');
+          console.log('OK: 3 Originalmessungen, 1 Linie, kein Mittelwert, Leeransicht und Einzelpunkt.');
+          NODE_VK206
+      - name: Nur gepruefte Programmdateien veroeffentlichen
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.js sw.js version.json
+          if git diff --cached --quiet; then
+            echo '2.0.6 ist bereits installiert; nichts zu veroeffentlichen.'
+          else
+            git commit -m 'VitalKompass 2.0.6: echte Einzelmessungen und lueckenlose Diagrammlinie'
+            git push origin HEAD:main
+          fi
