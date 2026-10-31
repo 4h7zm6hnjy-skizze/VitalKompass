@@ -1,0 +1,361 @@
+name: VitalKompass 2.0.10 - Originalwerte und Punktdetails
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/VitalKompass_2.0.10_Originalwerte_Detailansicht.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vitalkompass-210-originalwerte
+  cancel-in-progress: false
+
+jobs:
+  originalwerte-und-details:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Projekt laden
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: true
+      - name: Originalmessungen und Detailansicht einbauen
+        shell: bash
+        run: |
+          python3 - <<'PY_VK210'
+          from pathlib import Path
+          import hashlib, json
+
+          def blob_sha(raw):
+              return hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest()
+
+          expected = {
+           'app.js': '5670052d1ae7546a0d5eb010a34c9547f4b0974c',
+           'style.css': '473dc7d65daed23357fbf5a1a9efbcc1d0b82a5d',
+           'sw.js': 'fb3d30ee8e39e1260ccc84b1f3cf273ad545b5ed',
+           'version.json': '0cb452c3850da4386e15c8d8358ea0a04c6b69eb',
+          }
+          sources = {}
+          for file,sha in expected.items():
+              raw=Path(file).read_bytes()
+              if file == 'app.js' and b"const VERSION='2.0.10'" in raw:
+                  print('Version 2.0.10 bereits vorhanden: nichts wird erneut installiert.')
+                  raise SystemExit(0)
+              if blob_sha(raw)!=sha:
+                  raise RuntimeError(file+' hat einen anderen Stand als die gepruefte Version. Sichere Installation abgebrochen.')
+              sources[file]=raw.decode('utf-8')
+          app=sources['app.js']; css=sources['style.css']; sw=sources['sw.js']
+
+          def one(old,new,label):
+              global app
+              count=app.count(old)
+              if count!=1:raise RuntimeError(label+': unpassender Quelltext, Vorkommen '+str(count))
+              app=app.replace(old,new)
+
+          one("const VERSION='2.0.9'","const VERSION='2.0.10'",'Version')
+
+          # Bei dicht besetzten Kurven werden Zahlen nur bei nachvollziehbar grosser horizontaler Breite alle angezeigt.
+          one(
+           'function vk205PointLabels(points,W,H,L,R,T,B,decimals=1){',
+           'function vk205PointLabels(points,W,H,L,R,T,B,decimals=1,forceAll=false){',
+           'Beschriftungsparameter')
+          one(
+           'const stride=Math.max(1,Math.ceil(maxCount/24));',
+           'const stride=forceAll?1:Math.max(1,Math.ceil(maxCount/24));',
+           'Originalwert-Beschriftung')
+          one(
+           'const W=preloaded!==null?720:460,H=preloaded!==null?350:410,L=49,R=14,T=29,B=58;',
+           'const W=preloaded!==null?720:Math.max(460,Math.min(16000,rows.length*68+75)),H=preloaded!==null?350:410,L=49,R=14,T=29,B=58;',
+           'Blutzuckerdiagramm-Breite')
+          one(
+           'const x=i=>L+(rows.length===1?plotW/2:useTime?plotW*(times[i]-times[0])/(times.at(-1)-times[0]):plotW*i/(rows.length-1));',
+           'const x=i=>L+(rows.length===1?plotW/2:preloaded===null?plotW*i/(rows.length-1):useTime?plotW*(times[i]-times[0])/(times.at(-1)-times[0]):plotW*i/(rows.length-1));',
+           'Gleichmaessige Abstaende fuer alle Original-Messpunkte')
+          one(
+           'const labels=vk205PointLabels(labelRows,W,H,L,R,T,B,1);',
+           'const labels=vk205PointLabels(labelRows,W,H,L,R,T,B,1,preloaded===null);',
+           'Alle Blutzuckerwerte beschriften')
+          one(
+           'return `<circle cx="${x(i)}" cy="${y(r.mgdl)}" r="5.4"',
+           'return `<circle cx="${x(i)}" cy="${y(r.mgdl)}" r="9" data-vk210-id="${h(r.id||\'\')}"',
+           'Blutzuckerpunkt mit Original-ID')
+          one(
+           'return `<div class="chartwrap vk207-glucose-wrap"><svg class="chart" role="img"',
+           'return `<div class="chartwrap vk207-glucose-wrap"><svg class="chart" ${preloaded===null?`style="width:${W}px;min-width:${W}px;max-width:none"`:\'\'} role="img"',
+           'Scrollbares Blutzuckerdiagramm')
+
+          # Alle bisher aggregierenden Verlaufsgrafiken verwenden Einzelmessungen;
+          # zusammenfassende Mittelwerte in Berichtsstatistiken bleiben erhalten.
+          a=app.index('function weightChart(')
+          b=app.index('\n const W=wide,H=285',a)
+          sec=app[a:b]
+          if 'const buckets=new Map();' not in sec or "let rows=selected;" not in sec:raise RuntimeError('Gewicht: unerwarteter Quelltext')
+          start=app.index(' let rows=selected;',a)
+          app=app[:start]+" const rows=selected;\n const explanation='Alle gespeicherten Originalmessungen';"+app[b:]
+          a=app.index('function weightChart(')
+          b=app.index('function ',a+20)
+          weight=app[a:b]
+          if "period==='ten'?h(rows[i]._bucket):fmtDate(rows[i].date)" not in weight:raise RuntimeError('Gewicht: veraltete Datumsbeschriftung nicht gefunden')
+          weight=weight.replace("period==='ten'?h(rows[i]._bucket):fmtDate(rows[i].date)","fmtDate(rows[i].date)")
+          app=app[:a]+weight+app[b:]
+
+          a=app.index('function vkMiniTrend(')
+          b=app.index('\n const W=wide,H=230',a)
+          sec=app[a:b]
+          if 'let buckets=new Map();for(const r of arr)' not in sec or "if(period!=='day')arr=" not in sec:raise RuntimeError('Trenddiagramm: unbekannte Mittelungslogik')
+          start=app.index(' let buckets=new Map();for(const r of arr)',a)
+          app=app[:start]+" // Alle tatsaechlich gespeicherten Messungen in exakter Reihenfolge.\n"+app[b:]
+
+          a=app.index('function vk204OxygenChart(')
+          start=app.index(' const keyOf=r=>chartBucket(r,period), buckets=new Map();',a)
+          end=app.index("\n const isSp=field==='spo2'",start)
+          old=app[start:end]
+          if "avg(g.values)" not in old: raise RuntimeError('SpO2/PI: erwartete Verdichtung nicht gefunden')
+          app=app[:start]+""" const rows=all.filter(r=>Number.isFinite(r[field])).map(r=>({...r,value:r[field],count:1})).sort(sortdate);"""+app[end:]
+          a=app.index('function vk204OxygenChart(');b=app.index('function vk204OxygenTable(',a)
+          oxygen=app[a:b]
+          oxygen=oxygen.replace("period==='ten'?h(rows[i]._bucket):fmtDate(rows[i].date)","fmtDate(rows[i].date)")
+          oxygen=oxygen.replace("mehrere Messungen pro Zeitraum werden gemittelt","alle gespeicherten Einzelmessungen bleiben getrennt")
+          oxygen=oxygen.replace("const label=`${title} ${nf(r.value,2)} ${unit} · ${fmtDate(r.date)}","const label=`${title} ${nf(r.value,2)} ${unit} · ${fmtDate(r.date)} ${r.time||''}")
+          oxygen=oxygen.replace('class="vk-chart-point" data-chart-info="${h(label)}"','class="vk-chart-point" data-vk210-id="${h(r.id||\'\')}" data-chart-info="${h(label)}"')
+          app=app[:a]+oxygen+app[b:]
+
+          # Verknuepfungen der weiteren Kurven zur zugrunde liegenden Originalmessung
+          a=app.index('function weightChart(');b=app.index('function ',a+20)
+          part=app[a:b].replace('class="vk-chart-point" data-chart-info="${h(desc)}"','class="vk-chart-point" data-vk210-id="${h(r.id||\'\')}" data-chart-info="${h(desc)}"')
+          app=app[:a]+part+app[b:]
+          a=app.index('function vkMiniTrend(');b=app.index('function ',a+20)
+          part=app[a:b].replace('class="vk-chart-point" tabindex="0" role="button" data-chart-info="${h(desc)}"','class="vk-chart-point" tabindex="0" role="button" data-vk210-id="${h(r.id||\'\')}" data-chart-info="${h(desc)}"')
+          app=app[:a]+part+app[b:]
+          a=app.index('function lineChart(')
+          b=app.index('\nfunction ',a+20)
+          part=app[a:b].replace('class="vk-chart-point" data-chart-info="${h(desc)}"','class="vk-chart-point" data-vk210-id="${h(o.e.id||\'\')}" data-chart-info="${h(desc)}"')
+          if 'data-vk210-id="${h(o.e.id' not in part:raise RuntimeError('Blutdruck-Punktreferenz fehlt')
+          app=app[:a]+part+app[b:]
+
+          # Detaildialog, der nur lokal aus der entschluesselten App-Sitzung liest.
+          point_ui = r"""
+          /* VitalKompass 2.0.10: Originalwerte detailgenau und ohne Datenuebertragung darstellen. */
+          let vk210ReturnFocus=null;
+          function vk210ClosePoint(){
+           const modal=document.getElementById('vk210-point-modal');
+           if(!modal)return;
+           modal.remove();
+           const target=vk210ReturnFocus;vk210ReturnFocus=null;
+           if(target?.isConnected&&typeof target.focus==='function')target.focus();
+          }
+          function vk210PointRecord(id){
+           if(!id||!data)return null;
+           for(const name of ['measurements','weights','oxygenLogs','asthmaLogs','labs','urologyLogs']){
+            const r=(data[name]||[]).find(x=>x&&String(x.id||'')===id);
+            if(r)return {bucket:name,entry:r};
+           }
+           return null;
+          }
+          function vk210OpenPoint(point){
+           if(!point)return;
+           const info=String(point.dataset.chartInfo||'Messpunkt');
+           const id=String(point.dataset.vk210Id||'');
+           const found=vk210PointRecord(id),row=found?.entry;
+           vk210ClosePoint();vk210ReturnFocus=point;
+           const details=[];
+           const add=(label,value)=>{if(value!==undefined&&value!==null&&String(value).trim()!=='')details.push([label,String(value)])};
+           if(row){
+            if(Number.isFinite(row.mgdl))add('Blutzucker',nf(row.mgdl,1)+' mg/dl');
+            if(Number.isFinite(row.sys)&&Number.isFinite(row.dia))add('Blutdruck',nf(row.sys)+' / '+nf(row.dia)+' mmHg');
+            if(Number.isFinite(row.pulse))add('Puls',nf(row.pulse)+' /min');
+            if(Number.isFinite(row.kg))add('Körpergewicht',nf(row.kg,1)+' kg');
+            if(Number.isFinite(row.spo2))add('Blutsauerstoff',nf(row.spo2)+' %');
+            if(Number.isFinite(row.pi))add('Perfusionsindex',nf(row.pi,2)+' %');
+            if(Number.isFinite(row.peakFlow))add('Peak-Flow',nf(row.peakFlow)+' l/min');
+            if(Number.isFinite(row.fev1Pct))add('FEV1',nf(row.fev1Pct,1)+' %');
+            if(Number.isFinite(row.breathlessness))add('Atemnot',nf(row.breathlessness)+'/10');
+            if(Number.isFinite(row.score))add('Punktzahl',nf(row.score,1));
+            if(Number.isFinite(row.value))add('Laborwert',nf(row.value,2)+(row.unit?' '+row.unit:''));
+            if(row.date)add('Datum',fmtDate(row.date));
+            if(row.time)add('Uhrzeit',row.time);
+            if(row.period)add('Messsituation',gLabels[row.period]||row.period);
+            if(row.mealTiming&&row.mealTiming!=='unknown')add('Messzeitpunkt',bpMealLabels[row.mealTiming]||row.mealTiming);
+            if(row.situation&&found.bucket==='oxygenLogs')add('Messsituation',vk204OxygenSituation(row.situation));
+            if(typeof row.verified==='boolean')add('Prüfstatus',row.verified?'Bestätigt':'Noch nicht bestätigt');
+            if(row.source)add('Herkunft',row.source);
+            if(row.name)add('Bezeichnung',row.name);
+            if(row.note)add('Notiz',row.note);
+            if(row.notes)add('Weitere Notizen',row.notes);
+            if(Array.isArray(row.triggers)&&row.triggers.length)add('Auslöser',row.triggers.map(t=>ASTHMA_TRIGGERS[t]||t).join(', '));
+            const files=Array.isArray(row.attachments)?row.attachments:[];
+            if(files.length)add('Anhänge',files.map(f=>f.name||'Anhang').join(', '));
+           }
+           const modal=document.createElement('div');modal.id='vk210-point-modal';modal.className='vk210-point-modal';
+           modal.setAttribute('role','dialog');modal.setAttribute('aria-modal','true');modal.setAttribute('aria-label','Details zum Diagrammpunkt');
+           const title=found?'Gespeicherter Originalwert':'Information zum Diagrammpunkt';
+           const table=details.length?`<dl class="vk210-details">${details.map(([k,v])=>`<div><dt>${h(k)}</dt><dd>${h(v)}</dd></div>`).join('')}</dl>`:
+            '<p class="section-note">Zu diesem Diagrammpunkt ist keine eindeutige Originalmessung zugeordnet. Die unten stehenden Informationen stammen aus der Diagrammbeschriftung.</p>';
+           modal.innerHTML=`<section class="vk210-point-card"><div class="vk210-point-head"><strong>${h(title)}</strong><button type="button" data-vk210-close aria-label="Detailansicht schließen">Schließen</button></div>${table}<p class="vk210-info-text">${h(info)}</p><p class="section-note">Die Angaben werden nur aus dem lokalen Datenspeicher dieser App gelesen.</p></section>`;
+           document.body.appendChild(modal);
+           modal.addEventListener('click',e=>{if(e.target===modal||e.target.closest('[data-vk210-close]'))vk210ClosePoint()});
+           modal.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();vk210ClosePoint()}});
+           modal.querySelector('[data-vk210-close]')?.focus();
+          }
+          function vk210EnhanceCharts(){
+           const main=document.getElementById('main');if(!main)return;
+           main.querySelectorAll('.chartwrap').forEach(wrap=>{
+            if(wrap.dataset.vk210ListInstalled)return;
+            const points=[...wrap.querySelectorAll('svg.chart [data-chart-info]')];
+            if(!points.length)return;
+            wrap.dataset.vk210ListInstalled='1';
+            const details=document.createElement('details');details.className='vk210-point-list';
+            const summary=document.createElement('summary');
+            summary.textContent='Alle '+points.length+' Diagrammpunkte mit Originalwerten anzeigen';
+            details.appendChild(summary);
+            details.addEventListener('toggle',()=>{
+             if(!details.open||details.dataset.built)return;
+             const body=document.createElement('div');body.className='vk210-point-items';
+             for(const point of points){
+              const button=document.createElement('button');button.type='button';
+              button.className='vk210-point-item';button.setAttribute('data-vk210-list-point','');
+              button.dataset.chartInfo=point.dataset.chartInfo||'Messwert';
+              if(point.dataset.vk210Id)button.dataset.vk210Id=point.dataset.vk210Id;
+              button.textContent=point.dataset.chartInfo||'Messwert';
+              body.appendChild(button);
+             }
+             details.appendChild(body);details.dataset.built='1';
+            });
+            wrap.after(details);
+            if(wrap.classList.contains('vk207-glucose-wrap')&&wrap.scrollWidth>wrap.clientWidth+12){
+             const note=document.createElement('p');note.className='vk210-scroll-note';
+             note.textContent='Diagramm seitlich wischen. Jeder Messpunkt hat gleich viel Platz; fuer die echten Uhrzeiten und alle Werte die Liste unten oeffnen.';
+             wrap.before(note);wrap.scrollLeft=wrap.scrollWidth;
+            }
+           });
+          }
+          """
+          if app.count('function vk207EnhanceCharts(){')!=1:raise RuntimeError('Einbauposition fuer Punktdialog fehlt')
+          app=app.replace('function vk207EnhanceCharts(){',point_ui+'\nfunction vk207EnhanceCharts(){')
+          one("formatMobileTables($('#main'));vk207EnhanceCharts()}","formatMobileTables($('#main'));vk207EnhanceCharts();vk210EnhanceCharts()",'Diagramm-Initialisierung')
+          one("const point=e.target.closest('[data-chart-info]');if(point){toast(point.dataset.chartInfo||'Messwert');return}",
+              "const listPoint=e.target.closest('[data-vk210-list-point]');if(listPoint){vk210OpenPoint(listPoint);return}const point=e.target.closest('[data-chart-info]');if(point){vk210OpenPoint(point);return}",
+              'Punktklick Hauptrenderer')
+          one("e.preventDefault();toast(e.target.dataset.chartInfo||'Messwert')",
+              "e.preventDefault();vk210OpenPoint(e.target)",
+              'Punktklick Tastatur')
+          one(
+           'canvas.appendChild(source.cloneNode(true));',
+           "const clone=source.cloneNode(true);clone.removeAttribute('style');canvas.appendChild(clone);",
+           'Vollbild-Zoom trotz breiter Originalwertgrafik')
+          one("const pt=e.target.closest('[data-chart-info]');if(pt){toast(pt.dataset.chartInfo||'Messwert');return}",
+              "const pt=e.target.closest('[data-chart-info]');if(pt){vk210OpenPoint(pt);return}",
+              'Punktklick im Zoom')
+
+          app=app.replace("const VERSION='2.0.10'", "const VERSION='2.0.10'") # Noop, Datenbank-Schluessel bleibt gleich.
+          css += r"""
+
+          /* 2.0.10: gut erkennbare Originalwerte und leicht bedienbare Detailansicht auf dem iPhone. */
+          #main .vk207-glucose-wrap{overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;border-radius:12px}
+          #main .vk207-glucose-wrap svg.chart{height:410px;max-width:none;display:block}
+          .vk210-scroll-note{margin:6px 0 8px;color:#235575;font-size:.9rem;font-weight:650}
+          .vk210-point-list{margin:10px 0 18px;padding:0 12px;background:#f4f9fc;border:1px solid #c3d9e6;border-radius:12px}
+          .vk210-point-list summary{cursor:pointer;padding:15px 4px;min-height:48px;color:#0e557d;font-weight:750;list-style-position:inside}
+          .vk210-point-items{display:grid;gap:7px;padding:0 0 13px}
+          .vk210-point-item{border:1px solid #c1d7e3;border-radius:10px;text-align:left;padding:12px;min-height:46px;background:#fff;color:#153e59;font-size:.93rem;white-space:normal;overflow-wrap:anywhere}
+          .vk210-point-item:focus-visible,.vk210-point-item:active{outline:3px solid #0b8581;outline-offset:2px}
+          .vk210-point-modal{position:fixed;inset:0;z-index:10010;background:rgba(10,29,47,.76);display:grid;place-items:center;padding:15px}
+          .vk210-point-card{width:min(100%,570px);max-height:90dvh;overflow-y:auto;overscroll-behavior:contain;background:#fff;border-radius:18px;padding:17px;color:#163c56;box-shadow:0 10px 40px #0005}
+          .vk210-point-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-bottom:10px;border-bottom:1px solid #d7e5ed}
+          .vk210-point-head strong{font-size:1.15rem}
+          .vk210-point-head button{min-height:46px;border-radius:10px;padding:9px 14px;background:#116d87;color:white;font-weight:700;border:0}
+          .vk210-details{display:grid;gap:0;margin:12px 0}
+          .vk210-details>div{display:grid;grid-template-columns:minmax(100px,40%) minmax(0,1fr);gap:10px;padding:10px 0;border-bottom:1px solid #e5eef3;overflow-wrap:anywhere}
+          .vk210-details dt{color:#536d7e;font-size:.92rem;font-weight:650}
+          .vk210-details dd{margin:0;font-weight:700}
+          .vk210-info-text{font-size:.91rem;line-height:1.55;overflow-wrap:anywhere}
+          @media print{
+           .vk210-point-list,.vk210-point-modal,.vk210-scroll-note{display:none!important}
+           #main .vk207-glucose-wrap{overflow:visible!important}
+           #main .vk207-glucose-wrap svg.chart{max-width:100%!important;width:100%!important;height:auto!important;min-width:0!important}
+          }
+          """
+          sw=sw.replace("/* VitalKompass 2.0.9:","/* VitalKompass 2.0.10:").replace(
+           "const CACHE='vital-kompass-2.0.9-fasting-filter-fix';",
+           "const CACHE='vital-kompass-2.0.10-original-point-details';")
+          assert "const CACHE='vital-kompass-2.0.10-original-point-details';" in sw
+          notes="Alle gespeicherten Einzelwerte in Blutzucker-, Gewicht-, SpO2-, PI- und weiteren Verlaufskurven; dichte Blutzuckerdiagramme seitlich scrollbar; alle Punkte einzeln aufrufbar mit Datum, Uhrzeit, Messwert, Situation, Quellen und Notizen, soweit gespeichert. Keine Aenderung an verschluesselten Gesundheitsdaten."
+          version=json.dumps({"version":"2.0.10","released":"2026-10-31","notes":notes},ensure_ascii=False,indent=2)+"\n"
+
+          # Erst nach erfolgreichem Abgleich und allen Patch-Schritten schreiben.
+          Path('app.js').write_text(app,encoding='utf-8')
+          Path('style.css').write_text(css,encoding='utf-8')
+          Path('sw.js').write_text(sw,encoding='utf-8')
+          Path('version.json').write_text(version,encoding='utf-8')
+          print('Version 2.0.10 sicher vorbereitet: Originalwerte und Detailansicht.')
+          PY_VK210
+      - name: Syntax pruefen
+        shell: bash
+        run: |
+          node --check app.js
+      - name: Funktionstests fuer alle Zeitfilter und Originalwerte
+        shell: bash
+        run: |
+          node - <<'NODE_VK210'
+          const fs=require('node:fs'),assert=require('node:assert/strict'),vm=require('node:vm');
+          const s=fs.readFileSync('app.js','utf8'),css=fs.readFileSync('style.css','utf8');
+          assert(s.includes("const VERSION='2.0.10'"));
+          assert(s.includes("DB='vitalkompass-secure-v1'"));
+          assert(s.includes("['last7','Letzte 7 Tage']"));
+          assert(s.includes("['fasting','Nüchtern']"));
+          assert(s.includes("vk210OpenPoint(point)"));
+          assert(s.includes("vk210EnhanceCharts()"));
+          assert(s.includes("data-vk210-id="));
+          assert(s.includes("const rows=all.filter(r=>Number.isFinite(r[field]))"));
+          assert(s.includes("const rows=selected;"));
+          assert(s.includes("const stride=forceAll?1:"));
+          assert(css.includes('vk210-point-modal'));
+          assert(fs.readFileSync('sw.js','utf8').includes('2.0.10-original-point-details'));
+          assert(JSON.parse(fs.readFileSync('version.json','utf8')).version==='2.0.10');
+          // Funktionstest: der Blutzuckerverlauf setzt Originalwerte in jede zutreffende Ansicht.
+          function extract(start,end){const i=s.indexOf(start);assert(i>=0);const j=s.indexOf(end,i+start.length);assert(j>i);return s.slice(i,j)}
+          const code=extract('function vk207GlucoseChart(', '\n/* Gemeinsamer lokaler Diagramm-Zoom');
+          const labels=extract('function vk205PointLabels(', '\nfunction vk205HospitalValid(');
+          const rows=[
+           {id:'a',type:'glucose',date:'2026-10-02',time:'08:00',mgdl:108,period:'fasting',verified:true},
+           {id:'b',type:'glucose',date:'2026-10-25',time:'09:00',mgdl:215,period:'after',verified:false},
+           {id:'c',type:'glucose',date:'2026-10-29',time:'10:00',mgdl:120,period:'fasting',verified:true},
+           {id:'d',type:'glucose',date:'2026-10-31',time:'11:00',mgdl:100,period:'before',verified:true}
+          ];
+          let period='month',selection='all';
+          const ctx={data:{measurements:rows},filtered:()=>rows,reportPeriod:'month',CHART_PERIODS:[['day','Tag'],['last7','Letzte 7 Tage'],['week','Woche'],['month','Monat'],['year','Jahr'],['ten','10 Jahre']],chartPeriods:{glucose:'month'},chartMinDate:p=>({day:'2026-10-31',last7:'2026-10-25',week:'2026-10-26',month:'2026-10-01',year:'2026-01-01',ten:'2016-10-31'})[p],today:()=> '2026-10-31',gLabels:{fasting:'Nüchtern',before:'Vor dem Essen',after:'Nach dem Essen',other:'Sonstige'},colors:{fasting:'#087',before:'#a38',after:'#d65',other:'#555'},thresholdDefs:()=>[],chartTraffic:()=>({label:'Test'}),h:v=>String(v).replace(/&/g,'&amp;').replace(/"/g,'&quot;'),fmtDate:v=>v,nf:v=>String(v),sortdate:(a,b)=>(a.date+a.time).localeCompare(b.date+b.time),vk207GlucoseFilter:'all',console};
+          vm.createContext(ctx);
+          vm.runInContext(labels+code,ctx);
+          function chart(p,k='all'){ctx.vk207GlucoseFilter=k;return ctx.vk207GlucoseChart(p,720,null)}
+          function count(svg,expr){return [...svg.matchAll(expr)].length}
+          assert.equal(count(chart('month'),/data-vk210-id=/g),4,'Monat: alle vier Originale');
+          assert.equal(count(chart('year'),/data-vk210-id=/g),4,'Jahr: alle vier Originale');
+          assert.equal(count(chart('ten'),/data-vk210-id=/g),4,'10 Jahre: alle vier Originale');
+          assert.equal(count(chart('last7'),/data-vk210-id=/g),3,'7 Tage: drei Originale');
+          assert.equal(count(chart('week'),/data-vk210-id=/g),2,'Woche: zwei Originale');
+          assert.equal(count(chart('day'),/data-vk210-id=/g),1,'Tag: ein Original');
+          assert.equal(count(chart('month','fasting'),/data-vk210-id=/g),2,'Nüchtern: zwei Originale');
+          assert.equal(count(chart('month','before'),/data-vk210-id=/g),1,'Vor dem Essen: eins');
+          assert.equal(count(chart('month','after'),/data-vk210-id=/g),1,'Nach dem Essen: eins');
+          assert.equal(count(chart('month'),/class="vk205-point-value"/g),4,'Vier Zahlen im verbreiterten Diagramm');
+          for(const v of ['108','215','120','100'])assert(chart('month').includes('>'+v+'</text>')||chart('month').includes('>'+v+'</title>'),'Originalwert '+v);
+          assert(!s.includes("if(period!=='day')arr=[...buckets]"));
+          console.log('Prüfungen bestanden: Zeiträume Tag/7 Tage/Woche/Monat/Jahr/10 Jahre; Essensfilter; alle Originalwerte mit Einzelpunkt und sichtbarer Zahl; Offline-Zoom und Datenschutz.');
+          NODE_VK210
+      - name: Version veroeffentlichen
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.js style.css sw.js version.json
+          if git diff --cached --quiet; then
+            echo "Keine Aenderung notwendig."
+          else
+            git commit -m "VitalKompass 2.0.10: Originalwerte und Punktdetails"
+            git push origin HEAD:main
+          fi
