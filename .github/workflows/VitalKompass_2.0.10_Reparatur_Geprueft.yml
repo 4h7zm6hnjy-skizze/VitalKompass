@@ -1,0 +1,211 @@
+name: VitalKompass 2.0.10 - Reparatur und Syntaxpruefung
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/VitalKompass_2.0.10_Reparatur_Geprueft.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vitalkompass-210-repair
+  cancel-in-progress: false
+
+jobs:
+  reparatur-installieren:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Repository laden
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: true
+      - name: Diagramme reparieren und Syntax vorab kontrollieren
+        shell: bash
+        run: |
+          python3 - <<'PY_VK210_REPAIR'
+          from pathlib import Path
+          import hashlib, json, subprocess, tempfile
+
+          def github_blob(raw):
+              return hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\x00'+raw).hexdigest()
+
+          expected={
+           'app.js':'5670052d1ae7546a0d5eb010a34c9547f4b0974c',
+           'style.css':'473dc7d65daed23357fbf5a1a9efbcc1d0b82a5d',
+           'sw.js':'fb3d30ee8e39e1260ccc84b1f3cf273ad545b5ed',
+           'version.json':'0cb452c3850da4386e15c8d8358ea0a04c6b69eb'
+          }
+          sources={}
+          for fname,sha in expected.items():
+              raw=Path(fname).read_bytes()
+              if fname=='app.js' and b"const VERSION='2.0.10'" in raw:
+                  print('Die neue App-Version ist bereits installiert.')
+                  raise SystemExit(0)
+              if github_blob(raw)!=sha:
+                  raise RuntimeError(fname+' hat einen anderen Stand. Keine automatische Aenderung.')
+              sources[fname]=raw.decode('utf-8')
+          app=sources['app.js'];css=sources['style.css'];sw=sources['sw.js']
+
+          def once(old,new,label):
+              global app
+              count=app.count(old)
+              if count!=1:raise RuntimeError(label+': erwartete 1 Fundstelle, gefunden '+str(count))
+              app=app.replace(old,new)
+
+          once("const VERSION='2.0.9'","const VERSION='2.0.10'",'Version')
+          once('function vk205PointLabels(points,W,H,L,R,T,B,decimals=1){',
+               'function vk205PointLabels(points,W,H,L,R,T,B,decimals=1,forceAll=false){','Beschriftungen')
+          once('const stride=Math.max(1,Math.ceil(maxCount/24));',
+               'const stride=forceAll?1:Math.max(1,Math.ceil(maxCount/24));','Alle Beschriftungen')
+          once('const W=preloaded!==null?720:460,H=preloaded!==null?350:410,L=49,R=14,T=29,B=58;',
+               'const W=preloaded!==null?720:Math.max(460,Math.min(16000,rows.length*72+80)),H=preloaded!==null?350:410,L=49,R=14,T=29,B=58;','Diagrammbreite')
+          once('const x=i=>L+(rows.length===1?plotW/2:useTime?plotW*(times[i]-times[0])/(times.at(-1)-times[0]):plotW*i/(rows.length-1));',
+               'const x=i=>L+(rows.length===1?plotW/2:preloaded===null?plotW*i/(rows.length-1):useTime?plotW*(times[i]-times[0])/(times.at(-1)-times[0]):plotW*i/(rows.length-1));','Abstaende')
+          once('const labels=vk205PointLabels(labelRows,W,H,L,R,T,B,1);',
+               'const labels=vk205PointLabels(labelRows,W,H,L,R,T,B,1,preloaded===null);','Messwertbeschriftung')
+          once('return `<circle cx="${x(i)}" cy="${y(r.mgdl)}" r="5.4"',
+               'return `<circle cx="${x(i)}" cy="${y(r.mgdl)}" r="8" data-vk210-id="${h(r.id||\'\')}"','Originalmessungs-Verknuepfung')
+          once('return `<div class="chartwrap vk207-glucose-wrap"><svg class="chart" role="img"',
+               'return `<div class="chartwrap vk207-glucose-wrap"><svg class="chart" ${preloaded===null?`style="width:${W}px;min-width:${W}px;max-width:none"`:""} role="img"','Breites Diagramm')
+          once("formatMobileTables($('#main'));vk207EnhanceCharts()}",
+               "formatMobileTables($('#main'));vk207EnhanceCharts();vk210EnhanceCharts()}",'Initialisierung')
+          once("const point=e.target.closest('[data-chart-info]');if(point){toast(point.dataset.chartInfo||'Messwert');return}",
+               "const listPoint=e.target.closest('[data-vk210-list-point]');if(listPoint){vk210OpenPoint(listPoint);return}const point=e.target.closest('[data-chart-info]');if(point){vk210OpenPoint(point);return}",'Antippen des Punkts')
+          once("e.preventDefault();toast(e.target.dataset.chartInfo||'Messwert')",
+               "e.preventDefault();vk210OpenPoint(e.target)",'Tastaturbedienung')
+          once("const pt=e.target.closest('[data-chart-info]');if(pt){toast(pt.dataset.chartInfo||'Messwert');return}",
+               "const pt=e.target.closest('[data-chart-info]');if(pt){vk210OpenPoint(pt);return}",'Punkt im Zoom')
+          once('canvas.appendChild(source.cloneNode(true));',
+               "const vk210Clone=source.cloneNode(true);vk210Clone.removeAttribute('style');canvas.appendChild(vk210Clone);",'Zoom')
+
+          ui=r'''
+          /* VitalKompass 2.0.10: Antippbare Details aus dem lokalen Speicher */
+          let vk210Focus=null;
+          function vk210OpenPoint(point){
+           if(!point)return;
+           const info=String(point.dataset.chartInfo||'Messung'),id=String(point.dataset.vk210Id||'');
+           const groups=['measurements','oxygenLogs','weights','asthmaLogs','labs','urologyLogs'];
+           let entry=null;
+           for(const group of groups){const item=(data?.[group]||[]).find(r=>r&&String(r.id||'')===id);if(item){entry=item;break}}
+           const pairs=[],add=(k,v)=>{if(v!==null&&v!==undefined&&String(v).trim())pairs.push([k,String(v)])};
+           if(entry){
+            if(Number.isFinite(entry.mgdl))add('Blutzucker',nf(entry.mgdl,1)+' mg/dl');
+            if(Number.isFinite(entry.sys))add('Systolisch',nf(entry.sys)+' mmHg');
+            if(Number.isFinite(entry.dia))add('Diastolisch',nf(entry.dia)+' mmHg');
+            if(Number.isFinite(entry.pulse))add('Puls',nf(entry.pulse)+' /min');
+            if(Number.isFinite(entry.kg))add('Gewicht',nf(entry.kg,1)+' kg');
+            if(Number.isFinite(entry.spo2))add('Blutsauerstoff',nf(entry.spo2)+' %');
+            if(Number.isFinite(entry.pi))add('Perfusionsindex',nf(entry.pi,2)+' %');
+            if(Number.isFinite(entry.peakFlow))add('Peak-Flow',nf(entry.peakFlow)+' l/min');
+            if(Number.isFinite(entry.fev1Pct))add('FEV1',nf(entry.fev1Pct,1)+' %');
+            if(Number.isFinite(entry.value))add('Laborwert',nf(entry.value,2));
+            add('Datum',entry.date?fmtDate(entry.date):'');
+            add('Uhrzeit',entry.time||'');
+            add('Messsituation',entry.period?(gLabels[entry.period]||entry.period):'');
+            if(entry.verified===true||entry.verified===false)add('Prüfstatus',entry.verified?'Bestätigt':'Noch nicht bestätigt');
+            add('Quelle',entry.source||'');add('Notiz',entry.note||entry.notes||'');
+            if(Array.isArray(entry.attachments)&&entry.attachments.length)add('Anhänge',entry.attachments.map(f=>f.name||'Anhang').join(', '));
+           }
+           document.getElementById('vk210-point-dialog')?.remove();
+           vk210Focus=point;
+           const dialog=document.createElement('div');dialog.id='vk210-point-dialog';dialog.className='vk210-point-dialog';
+           dialog.setAttribute('role','dialog');dialog.setAttribute('aria-modal','true');dialog.setAttribute('aria-label','Messwertdetails');
+           dialog.innerHTML=`<section class="vk210-point-card"><header><strong>${entry?'Gespeicherte Originalmessung':'Diagramminformation'}</strong><button type="button" data-vk210-close>Schließen</button></header><dl>${pairs.map(([k,v])=>`<div><dt>${h(k)}</dt><dd>${h(v)}</dd></div>`).join('')}</dl><p>${h(info)}</p><small>${entry?'Alle verfügbaren Angaben aus dem lokalen Speicher.':'Zu diesem Punkt ist keine einzelne Originalmessung verknüpft.'}</small></section>`;
+           document.body.appendChild(dialog);
+           const close=()=>{dialog.remove();if(vk210Focus?.isConnected)vk210Focus.focus?.();vk210Focus=null};
+           dialog.addEventListener('click',e=>{if(e.target===dialog||e.target.closest('[data-vk210-close]'))close()});
+           dialog.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();close()}});
+           dialog.querySelector('[data-vk210-close]')?.focus();
+          }
+          function vk210EnhanceCharts(){
+           const main=document.getElementById('main');if(!main)return;
+           main.querySelectorAll('.chartwrap').forEach(wrap=>{
+            const points=[...wrap.querySelectorAll('svg.chart [data-chart-info]')];if(!points.length)return;
+            const list=document.createElement('details');list.className='vk210-point-list';
+            const summary=document.createElement('summary');summary.textContent='Alle '+points.length+' Messpunkte einzeln ansehen';list.appendChild(summary);
+            list.addEventListener('toggle',()=>{
+             if(!list.open||list.dataset.ready)return;
+             for(const pt of points){
+              const button=document.createElement('button');button.type='button';button.className='vk210-point-item';button.dataset.vk210ListPoint='1';button.dataset.chartInfo=pt.dataset.chartInfo||'Messwert';
+              if(pt.dataset.vk210Id)button.dataset.vk210Id=pt.dataset.vk210Id;
+              button.textContent=pt.dataset.chartInfo||'Messwert';list.appendChild(button);
+             }
+             list.dataset.ready='1';
+            });
+            wrap.after(list);
+            if(wrap.classList.contains('vk207-glucose-wrap')&&wrap.scrollWidth>wrap.clientWidth){
+             const note=document.createElement('p');note.className='vk210-scroll-note';note.textContent='Für alle Werte seitlich wischen oder die Messpunktliste öffnen.';wrap.before(note);wrap.scrollLeft=wrap.scrollWidth;
+            }
+           });
+          }
+          '''
+          once('function vk207EnhanceCharts(){',ui+'\nfunction vk207EnhanceCharts(){','Neue Detailansicht')
+
+          css+='''\n/* VitalKompass 2.0.10: Einzelwerte und antippbare Punktdetails */
+          #main .vk207-glucose-wrap{overflow-x:auto!important;overflow-y:hidden!important;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y}
+          #main .vk207-glucose-wrap svg.chart{height:410px!important;max-width:none!important;display:block}
+          .vk210-scroll-note{margin:7px 0;color:#265777;font-weight:650}
+          .vk210-point-list{margin:9px 0 18px;padding:8px 12px;background:#f3f9fc;border:1px solid #b7cedd;border-radius:12px}
+          .vk210-point-list summary{cursor:pointer;min-height:45px;padding:11px 3px;font-weight:750;color:#0c547d}
+          .vk210-point-item{display:block;width:100%;margin-bottom:8px;padding:12px;border:1px solid #bbd3df;border-radius:10px;background:#fff;color:#17405c;text-align:left;min-height:46px;white-space:normal;overflow-wrap:anywhere}
+          .vk210-point-dialog{position:fixed;inset:0;z-index:10010;background:#071d31c9;display:grid;place-items:center;padding:14px}
+          .vk210-point-card{width:min(100%,570px);max-height:90dvh;overflow-y:auto;background:white;color:#183d56;padding:18px;border-radius:17px}
+          .vk210-point-card header{display:flex;justify-content:space-between;align-items:center;gap:9px}
+          .vk210-point-card header strong{font-size:1.09rem}
+          .vk210-point-card header button{padding:11px;background:#136a87;color:white;border-radius:9px;border:0;min-height:44px}
+          .vk210-point-card dl>div{display:grid;grid-template-columns:37% 1fr;gap:10px;border-bottom:1px solid #e3edf4;padding:10px 0;overflow-wrap:anywhere}
+          .vk210-point-card dt{font-weight:600;color:#527185}
+          .vk210-point-card dd{margin:0;font-weight:750}
+          @media print{.vk210-point-list,.vk210-point-dialog,.vk210-scroll-note{display:none!important}#main .vk207-glucose-wrap{overflow:visible!important}#main .vk207-glucose-wrap svg.chart{max-width:100%!important;width:100%!important;min-width:0!important;height:auto!important}}
+          '''
+          sw=sw.replace('/* VitalKompass 2.0.9:','/* VitalKompass 2.0.10:').replace("const CACHE='vital-kompass-2.0.9-fasting-filter-fix';","const CACHE='vital-kompass-2.0.10-repair-checked';")
+          if "const CACHE='vital-kompass-2.0.10-repair-checked';" not in sw:raise RuntimeError('Service Worker passt nicht')
+          version=json.dumps({'version':'2.0.10','released':'2026-10-31','notes':'Blutzuckerdiagramm mit allen gespeicherten Einzelpunkten und lesbaren Zahlen; seitliches Scrollen; anklickbare Detailansicht und vollstaendige Punktliste. Keine Datenbank-Aenderung.'},ensure_ascii=False,indent=2)+'\n'
+          # Korrekte JavaScript-Syntax sicherstellen, BEVOR die Repositorydateien veraendert werden.
+          with tempfile.TemporaryDirectory(prefix='vk210-test-') as d:
+              test=Path(d)/'app.js'
+              test.write_text(app,encoding='utf-8')
+              result=subprocess.run(['node','--check',str(test)],capture_output=True,text=True)
+              if result.returncode!=0:
+                  raise RuntimeError('JavaScript-Syntax nicht bestanden. Keine Aenderung. '+result.stderr[-1500:])
+          if app.count('data-vk210-id')<1 or 'vk210OpenPoint(point)' not in app or 'vk210EnhanceCharts()' not in app:raise RuntimeError('Detailfunktionen fehlen')
+          if "DB='vitalkompass-secure-v1'" not in app:raise RuntimeError('Datenspeicher unerwartet anders')
+          Path('app.js').write_text(app,encoding='utf-8')
+          Path('style.css').write_text(css,encoding='utf-8')
+          Path('sw.js').write_text(sw,encoding='utf-8')
+          Path('version.json').write_text(version,encoding='utf-8')
+          print('Erfolgreich geprueft: JavaScript-Syntax, Originalpunkte, Detailansicht, Offline-Version; Speicherung unveraendert.')
+          PY_VK210_REPAIR
+      - name: JavaScript und Datenverknuepfung nochmal pruefen
+        shell: bash
+        run: |
+          node --check app.js
+          python3 - <<'PY_CHECK'
+          from pathlib import Path
+          a=Path('app.js').read_text()
+          assert "const VERSION='2.0.10'" in a
+          assert "DB='vitalkompass-secure-v1'" in a
+          assert "['last7','Letzte 7 Tage']" in a
+          assert "['fasting','Nüchtern']" in a
+          assert 'vk210OpenPoint(point)' in a
+          assert 'vk210EnhanceCharts()' in a
+          assert "const stride=forceAll?1:" in a
+          print('Alle Strukturpruefungen bestanden.')
+          PY_CHECK
+      - name: VitalKompass 2.0.10 veroeffentlichen
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.js style.css sw.js version.json
+          if git diff --cached --quiet; then
+            echo "Keine Aenderung notwendig."
+          else
+            git commit -m "VitalKompass 2.0.10: gepruefte Reparatur, Originalwerte und Detailansicht"
+            git push origin HEAD:main
+          fi
