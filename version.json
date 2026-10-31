@@ -1,5 +1,5 @@
 {
-  "version": "2.0.7",
+  "version": "2.0.8",
   "released": "2026-10-31",
-  "notes": "Blutzucker: Alle zusammen, Vor dem Essen oder Nach dem Essen filtern (Nuechtern/Sonstige nur in Alle); grosse Diagrammflaeche mit neun Skalenteilungen; Vollbildzoom mit 100–500 Prozent, Plus/Minus, Fingerbewegung und Pinch. Zoom in allen Diagrammen. Keine neuen Messwerte oder Datenbankeingriffe."
+  "notes": "Blutzuckerfilter: Alle zusammen, Nüchtern, Vor dem Essen, Nach dem Essen. Letzte 7 Tage als zusaetzlicher Zeitraum in allen Diagrammen. Bestehende Zoombedienung und Originalmesswerte bleiben erhalten; keine Aenderung am verschluesselten Datenspeicher."
 }

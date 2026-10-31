@@ -1,7 +1,7 @@
 /* VitalKompass v1.9.7 — lokal, keine externen Bibliotheken, keine Analytics */
 'use strict';
 (() => {
-const VERSION='2.0.7', DB='vitalkompass-secure-v1', STORE='safe', KEY='vault';
+const VERSION='2.0.8', DB='vitalkompass-secure-v1', STORE='safe', KEY='vault';
 const root=document.getElementById('root');
 const $=(q,scope=document)=>scope.querySelector(q);
 const $$=(q,scope=document)=>Array.from(scope.querySelectorAll(q));
@@ -340,7 +340,7 @@ function chartTrafficLegend(){
  '</div><p class="vk-traffic-disclaimer">Ampelfarben dienen der Orientierung, sind keine Diagnose und keine Entwarnung. Gruppierte Werte sind Durchschnittswerte; auffällige Einzelwerte können darin verborgen bleiben. Maßgeblich sind ärztlich vereinbarte Grenzen und Beschwerden.</p>';
 }
 
-const CHART_PERIODS=[['day','Tag'],['week','Woche'],['month','Monat'],['year','Jahr'],['ten','10 Jahre']];
+const CHART_PERIODS=[['day','Tag'],['last7','Letzte 7 Tage'],['week','Woche'],['month','Monat'],['year','Jahr'],['ten','10 Jahre']];
 let chartPeriods={glucose:'month',bp:'month','bp-sys':'month','bp-dia':'month',pulse:'month',weight:'month',asthma:'month',oxygen:'month',lab:'year'};
 function chartPicker(type){const active=chartPeriods[type]||'month';return `<div class="subnav chart-periods" role="group" aria-label="Ansichtszeitraum für ${h(type)}">${CHART_PERIODS.map(([v,label])=>`<button type="button" data-chart-period="${v}" data-chart-type="${type}" aria-pressed="${v===active}" class="${v===active?'active':''}">${label}</button>`).join('')}</div>`+(type==='glucose'?vk207GlucosePicker():'')}
 function chartMinDate(period){const d=new Date(), y=d.getFullYear(),m=d.getMonth(),day=d.getDate(), fmt=x=>`${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`;
@@ -1054,8 +1054,8 @@ return {label:'',level:'pending'};}
 /* VitalKompass 2.0.7 – echte Einzelwerte, Essensfilter, groessere Achsen und zoomfaehige SVG-Ansicht. */
 let vk207GlucoseFilter='all';
 function vk207GlucosePicker(){
- const options=[['all','Alle zusammen'],['before','Vor dem Essen'],['after','Nach dem Essen']];
- return `<div class="vk207-filter" role="group" aria-label="Blutzuckermessungen nach Essenszeitpunkt filtern"><span class="vk207-filter-title">Messwerte anzeigen</span><div class="vk207-filter-buttons">${options.map(([key,label])=>`<button type="button" data-vk207-glucose="${key}" class="${vk207GlucoseFilter===key?'active':''}" aria-pressed="${vk207GlucoseFilter===key}">${label}</button>`).join('')}</div><small>Nüchtern und Sonstige erscheinen nur bei „Alle zusammen“. Keine Messwerte werden geändert oder gelöscht.</small></div>`;
+ const options=[['all','Alle zusammen'],['fasting','Nüchtern'],['before','Vor dem Essen'],['after','Nach dem Essen']];
+ return `<div class="vk207-filter" role="group" aria-label="Blutzuckermessungen nach Essenszeitpunkt filtern"><span class="vk207-filter-title">Messwerte anzeigen</span><div class="vk207-filter-buttons">${options.map(([key,label])=>`<button type="button" data-vk207-glucose="${key}" class="${vk207GlucoseFilter===key?'active':''}" aria-pressed="${vk207GlucoseFilter===key}">${label}</button>`).join('')}</div><small>Nüchtern ist separat auswählbar. Sonstige Messungen erscheinen bei „Alle zusammen“. Keine Messwerte werden geändert oder gelöscht.</small></div>`;
 }
 function vk207GlucoseChart(days='month',wide=720,preloaded=null){
  const period=preloaded!==null?(reportPeriod==='year'?'year':'month'):(CHART_PERIODS.some(x=>x[0]===days)?days:(chartPeriods.glucose||'month'));
