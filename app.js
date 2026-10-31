@@ -1,7 +1,7 @@
 /* VitalKompass v1.9.7 — lokal, keine externen Bibliotheken, keine Analytics */
 'use strict';
 (() => {
-const VERSION='2.0.9', DB='vitalkompass-secure-v1', STORE='safe', KEY='vault';
+const VERSION='2.0.10', DB='vitalkompass-secure-v1', STORE='safe', KEY='vault';
 const root=document.getElementById('root');
 const $=(q,scope=document)=>scope.querySelector(q);
 const $$=(q,scope=document)=>Array.from(scope.querySelectorAll(q));
@@ -224,7 +224,7 @@ function vk203HomeQuick(){
 }
 function nav(){return `<div class="vk203-drawer-shell" id="vk203-drawer-shell"><button class="vk203-backdrop" type="button" data-vk203-close aria-label="Menü schließen" tabindex="-1"></button><aside id="vk203-drawer" class="vk203-drawer" role="dialog" aria-modal="true" aria-label="VitalKompass Hauptmenü" aria-hidden="true" inert><header class="vk203-drawer-header"><div><strong>VitalKompass</strong><small>Alle Bereiche</small></div><button type="button" class="vk203-drawer-x" data-vk203-close-inside aria-label="Menü schließen">✕</button></header><label class="vk203-search-label" for="vk203-search">Bereich suchen</label><input id="vk203-search" type="search" autocomplete="off" placeholder="z. B. Labor, Prostata, GdB"><nav class="vk203-menu-list" aria-label="App-Bereiche">${VK203_MENU.map(([group,items])=>`<section class="vk203-group"><h3>${h(group)}</h3>${items.map(([id,label,symbol])=>`<button class="vk203-menu-item" type="button" data-view="${id}" aria-current="${view===id?'page':'false'}"><span class="vk203-menu-symbol" aria-hidden="true">${symbol}</span><span>${h(label)}</span></button>`).join('')}</section>`).join('')}</nav><p class="vk203-menu-empty" id="vk203-menu-empty" hidden>Keinen passenden Bereich gefunden.</p><p class="vk203-menu-footer">Gesundheitsdaten bleiben lokal verschlüsselt gespeichert.</p></aside></div>`}
 function common(){document.body.classList.remove('vk203-drawer-open');document.body.classList.toggle('senior-mode',data?.settings?.seniorMode===true);root.innerHTML=`<header class="topbar vk203-topbar"><button class="vk203-menu-trigger" type="button" data-vk203-open aria-controls="vk203-drawer" aria-expanded="false"><span aria-hidden="true">☰</span><span>Menü</span></button><div class="brand"><img src="icon-192.png" alt="VitalKompass Logo"><div><strong>VitalKompass</strong><small>Mein Gesundheitsjournal</small></div></div><span class="version">Version ${VERSION}</span><button class="quiet" data-action="lock" type="button">Sperren</button></header><div class="layout">${nav()}<main id="main"></main><nav class="vk-bottom-nav" aria-label="Schnellnavigation"><button type="button" data-view="glucose" aria-current="${view==='glucose'?'page':'false'}">Diabetes</button><button type="button" data-view="urology" aria-current="${view==='urology'?'page':'false'}">Prostata</button><button type="button" data-view="bp" aria-current="${view==='bp'?'page':'false'}">Blutdruck</button></nav><footer class="foot">Daten ausschließlich auf diesem Gerät · Passwortgeschützt · Keine automatische ärztliche Diagnose oder Medikamentenprüfung · <b>Version ${VERSION}</b></footer></div>`;renderMain()}
-function renderMain(){if(!data){return}const main=$('#main');main.dataset.section=view;const content={start:pageStart,profile:pageProfile,gdb:pageGdb,analysis:pageAnalysis,pro:pagePro,prevention:pagePrevention,symptoms:pageSymptoms,medlog:pageMedLog,reminders:pageReminders,hospital:pageHospital,evidence:pageEvidence,glucose:pageGlucose,bp:pageBp,weight:pageWeight,urology:pageUrology,asthma:pageAsthma,oxygen:pageOxygen,doctor:pageReportPlus,labs:pageLabs,meds:pageMeds,emergency:pageEmergency,stats:pageStats,benefits:pageBenefits,settings:pageSettings};$('#main').innerHTML=(content[view]||pageStart)();formatMobileTables($('#main'));vk207EnhanceCharts()}
+function renderMain(){if(!data){return}const main=$('#main');main.dataset.section=view;const content={start:pageStart,profile:pageProfile,gdb:pageGdb,analysis:pageAnalysis,pro:pagePro,prevention:pagePrevention,symptoms:pageSymptoms,medlog:pageMedLog,reminders:pageReminders,hospital:pageHospital,evidence:pageEvidence,glucose:pageGlucose,bp:pageBp,weight:pageWeight,urology:pageUrology,asthma:pageAsthma,oxygen:pageOxygen,doctor:pageReportPlus,labs:pageLabs,meds:pageMeds,emergency:pageEmergency,stats:pageStats,benefits:pageBenefits,settings:pageSettings};$('#main').innerHTML=(content[view]||pageStart)();formatMobileTables($('#main'));vk207EnhanceCharts();vk210EnhanceCharts()}
 function formatMobileTables(scope){for(const table of scope.querySelectorAll('.table-wrap table')){const labels=[...table.querySelectorAll('thead th')].map(x=>x.textContent.trim());for(const tr of table.querySelectorAll('tbody tr')){[...tr.children].forEach((cell,i)=>{cell.dataset.label=labels[i]||'Wert'})}}}
 function authPage(hasVault){root.innerHTML=`<div class="authwrap"><section class="authbox"><div class="authlogo"><img src="icon-192.png" alt=""><div><h1>VitalKompass</h1><small>Privates Gesundheitsjournal · Version ${VERSION}</small></div></div>${canUseCrypto?'':`<div class="notice danger">Dieser Browser bietet hier keine sichere Verschlüsselung. Öffne die App unter HTTPS (z. B. GitHub Pages) oder auf localhost. Keine Daten werden unverschlüsselt gespeichert.</div>`}<h2>${hasVault?'Mit Passwort entsperren':'Privaten Speicher anlegen'}</h2><p>${hasVault?'Deine Gesundheitsdaten sind verschlüsselt auf diesem Gerät gespeichert.':'Lege ein starkes Passwort mit mindestens 10 Zeichen fest. Nur du kennst es. Ohne Passwort kann niemand – auch die App nicht – deine Daten wiederherstellen.'}</p><form id="auth-form"><label class="field"><span>Passwort</span><input name="password" type="password" autocomplete="${hasVault?'current-password':'new-password'}" required minlength="10"></label>${hasVault?'':`<label class="field"><span>Passwort wiederholen</span><input name="confirm" type="password" required minlength="10" autocomplete="new-password"></label>`}<button type="submit" ${!canUseCrypto?'disabled':''} class="primary">${hasVault?'Entsperren':'Speicher sicher anlegen'}</button></form><hr class="divider"><p class="section-note">Wichtig: Für einen Gerätewechsel vorher ein verschlüsseltes Backup erstellen. Bei gelöschtem Browser-Speicher sind lokale Daten sonst verloren.</p></section></div>`}
 async function init(){if(!('indexedDB' in window)){root.textContent='IndexedDB wird in diesem Browser nicht unterstützt.';return}try{db=await dbopen();const old=await getRec();authPage(!!old);const p=new URLSearchParams(location.search);if(p.has('demo'))toast('Es gibt keine öffentliche Demo mit persönlichen Patientendaten.')}catch(e){root.textContent=`Speicher nicht verfügbar: ${e.message}. Bitte privaten Modus deaktivieren bzw. HTTPS verwenden.`}}
@@ -936,11 +936,11 @@ function vk205Summary(title,rows,field,unit='',decimals=1){
 }
 /* Zahl direkt am Messpunkt. Bei Platzmangel ist die Beschriftung ausgedünnt,
    nicht überlagert; jeder Einzelwert bleibt per Antippen des Punktes erreichbar. */
-function vk205PointLabels(points,W,H,L,R,T,B,decimals=1){
+function vk205PointLabels(points,W,H,L,R,T,B,decimals=1,forceAll=false){
  const clean=points.filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y)&&Number.isFinite(p.v));
  if(!clean.length)return '';
  const occupied=[];let output='';const maxCount=clean.length;
- const stride=Math.max(1,Math.ceil(maxCount/24));
+ const stride=forceAll?1:Math.max(1,Math.ceil(maxCount/24));
  for(let index=0;index<clean.length;index++){
   const p=clean[index];if(index%stride!==0&&index!==clean.length-1)continue;
   const label=nf(p.v,decimals),width=Math.max(28,label.length*8.2+8),height=16;
@@ -1073,7 +1073,7 @@ function vk207GlucoseChart(days='month',wide=720,preloaded=null){
  if(!rows.length)return `<div class="vk207-no-values" role="status">Für diese Auswahl sind keine gespeicherten Messwerte vorhanden.</div>${legend}`;
  // Eine hohe Diagrammflaeche und dynamische, sichtbare Skala mit 9 waagerechten Hilfslinien.
  // Bei PDF-Berichten bleiben die breiteren A4-Masse erhalten.
- const W=preloaded!==null?720:460,H=preloaded!==null?350:410,L=49,R=14,T=29,B=58;
+ const W=preloaded!==null?720:Math.max(460,Math.min(16000,rows.length*72+80)),H=preloaded!==null?350:410,L=49,R=14,T=29,B=58;
  const plotW=W-L-R,plotH=H-T-B,values=rows.map(r=>r.mgdl),vmin=Math.min(...values),vmax=Math.max(...values);
  let lo=Math.max(0,Math.floor((vmin-8)/10)*10),hi=Math.ceil((vmax+8)/10)*10;
  if(hi-lo<40){const mid=(lo+hi)/2;lo=Math.max(0,Math.floor((mid-20)/10)*10);hi=Math.ceil((mid+20)/10)*10}
@@ -1081,7 +1081,7 @@ function vk207GlucoseChart(days='month',wide=720,preloaded=null){
  const y=v=>T+plotH-((v-lo)/(hi-lo))*plotH;
  const times=rows.map(r=>Date.parse(`${r.date}T${/^\d{2}:\d{2}$/.test(r.time||'')?r.time:'12:00'}:00`));
  const useTime=times.every(Number.isFinite)&&times.length>1&&times.at(-1)>times[0];
- const x=i=>L+(rows.length===1?plotW/2:useTime?plotW*(times[i]-times[0])/(times.at(-1)-times[0]):plotW*i/(rows.length-1));
+ const x=i=>L+(rows.length===1?plotW/2:preloaded===null?plotW*i/(rows.length-1):useTime?plotW*(times[i]-times[0])/(times.at(-1)-times[0]):plotW*i/(rows.length-1));
  const count=9;
  const grid=Array.from({length:count},(_,i)=>{const v=lo+(hi-lo)*i/(count-1),py=y(v);return `<line x1="${L}" y1="${py}" x2="${W-R}" y2="${py}" stroke="#dde9f0"/><text x="${L-6}" y="${py+4.5}" font-size="13" text-anchor="end" fill="#365366">${nf(v,0)}</text>`}).join('');
  const guides=thresholdDefs('glucose').filter(([v])=>v>=lo&&v<=hi).map(([v,label,col])=>`<line x1="${L}" y1="${y(v)}" x2="${W-R}" y2="${y(v)}" stroke="${col}" stroke-dasharray="6 5" stroke-width="1.6" opacity=".8"><title>${h(label)}: ${nf(v)} mg/dl</title></line>`).join('');
@@ -1091,18 +1091,79 @@ function vk207GlucoseChart(days='month',wide=720,preloaded=null){
   const color=colors[kind];
   const classificationText=chartTraffic('glucose',r,kind).label;
   const label=`${gLabels[kind]} · ${nf(r.mgdl,1)} mg/dl · ${fmtDate(r.date)} ${r.time||''} · ${classificationText} · ${r.verified===true?'bestätigt':'noch unbestätigt'}${r.note?' · '+r.note:''}`;
-  return `<circle cx="${x(i)}" cy="${y(r.mgdl)}" r="5.4" fill="${r.verified===true?color:'#fff'}" stroke="${color}" stroke-width="${r.verified===true?'1.5':'2.7'}" class="vk-chart-point" role="button" tabindex="0" data-chart-info="${h(label)}"><title>${h(label)}</title></circle>`;
+  return `<circle cx="${x(i)}" cy="${y(r.mgdl)}" r="8" data-vk210-id="${h(r.id||'')}" fill="${r.verified===true?color:'#fff'}" stroke="${color}" stroke-width="${r.verified===true?'1.5':'2.7'}" class="vk-chart-point" role="button" tabindex="0" data-chart-info="${h(label)}"><title>${h(label)}</title></circle>`;
  }).join('');
  // 9 Skalenmarken plus bis zu 18 abstandsgesicherte Originalwert-Beschriftungen.
  const labelRows=rows.map((r,i)=>({x:x(i),y:y(r.mgdl),v:r.mgdl}));
- const labels=vk205PointLabels(labelRows,W,H,L,R,T,B,1);
+ const labels=vk205PointLabels(labelRows,W,H,L,R,T,B,1,preloaded===null);
  const indices=[0,Math.floor((rows.length-1)/2),rows.length-1].filter((v,i,a)=>a.indexOf(v)===i);
  const ticks=indices.map(i=>`<text x="${x(i)}" y="${H-23}" text-anchor="${i===0?'start':i===rows.length-1?'end':'middle'}" font-size="12.5" fill="#365366">${fmtDate(rows[i].date)}</text>`).join('');
  const unverified=rows.filter(r=>r.verified!==true).length;
- return `<div class="chartwrap vk207-glucose-wrap"><svg class="chart" role="img" aria-label="Blutzucker: ${rows.length} echte Einzelmessungen, Auswahl ${h(selection)}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">${grid}${guides}<line x1="${L}" y1="${T}" x2="${L}" y2="${H-B}" stroke="#708da0"/>${points}${dots}${labels}${ticks}<text x="${L}" y="${H-7}" font-size="12" fill="#395b70">mg/dl · ${rows.length} Messung${rows.length===1?'':'en'}</text></svg></div>${legend}<p class="section-note">${rows.length} gespeicherte Einzelmessung${rows.length===1?'':'en'} · ${unverified} noch nicht bestätigt. Nur echte Messwerte, keine Mittelwerte. Tippe auf einen Messpunkt für Datum, Uhrzeit und Details. Zum Vergrößern „Diagramm groß ansehen“ wählen.</p>`;
+ return `<div class="chartwrap vk207-glucose-wrap"><svg class="chart" ${preloaded===null?`style="width:${W}px;min-width:${W}px;max-width:none"`:""} role="img" aria-label="Blutzucker: ${rows.length} echte Einzelmessungen, Auswahl ${h(selection)}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">${grid}${guides}<line x1="${L}" y1="${T}" x2="${L}" y2="${H-B}" stroke="#708da0"/>${points}${dots}${labels}${ticks}<text x="${L}" y="${H-7}" font-size="12" fill="#395b70">mg/dl · ${rows.length} Messung${rows.length===1?'':'en'}</text></svg></div>${legend}<p class="section-note">${rows.length} gespeicherte Einzelmessung${rows.length===1?'':'en'} · ${unverified} noch nicht bestätigt. Nur echte Messwerte, keine Mittelwerte. Tippe auf einen Messpunkt für Datum, Uhrzeit und Details. Zum Vergrößern „Diagramm groß ansehen“ wählen.</p>`;
 }
 
 /* Gemeinsamer lokaler Diagramm-Zoom – fuer Blutzucker, Blutdruck, Gewicht, Puls, SpO2 usw. */
+
+/* VitalKompass 2.0.10: Antippbare Details aus dem lokalen Speicher */
+let vk210Focus=null;
+function vk210OpenPoint(point){
+ if(!point)return;
+ const info=String(point.dataset.chartInfo||'Messung'),id=String(point.dataset.vk210Id||'');
+ const groups=['measurements','oxygenLogs','weights','asthmaLogs','labs','urologyLogs'];
+ let entry=null;
+ for(const group of groups){const item=(data?.[group]||[]).find(r=>r&&String(r.id||'')===id);if(item){entry=item;break}}
+ const pairs=[],add=(k,v)=>{if(v!==null&&v!==undefined&&String(v).trim())pairs.push([k,String(v)])};
+ if(entry){
+  if(Number.isFinite(entry.mgdl))add('Blutzucker',nf(entry.mgdl,1)+' mg/dl');
+  if(Number.isFinite(entry.sys))add('Systolisch',nf(entry.sys)+' mmHg');
+  if(Number.isFinite(entry.dia))add('Diastolisch',nf(entry.dia)+' mmHg');
+  if(Number.isFinite(entry.pulse))add('Puls',nf(entry.pulse)+' /min');
+  if(Number.isFinite(entry.kg))add('Gewicht',nf(entry.kg,1)+' kg');
+  if(Number.isFinite(entry.spo2))add('Blutsauerstoff',nf(entry.spo2)+' %');
+  if(Number.isFinite(entry.pi))add('Perfusionsindex',nf(entry.pi,2)+' %');
+  if(Number.isFinite(entry.peakFlow))add('Peak-Flow',nf(entry.peakFlow)+' l/min');
+  if(Number.isFinite(entry.fev1Pct))add('FEV1',nf(entry.fev1Pct,1)+' %');
+  if(Number.isFinite(entry.value))add('Laborwert',nf(entry.value,2));
+  add('Datum',entry.date?fmtDate(entry.date):'');
+  add('Uhrzeit',entry.time||'');
+  add('Messsituation',entry.period?(gLabels[entry.period]||entry.period):'');
+  if(entry.verified===true||entry.verified===false)add('Prüfstatus',entry.verified?'Bestätigt':'Noch nicht bestätigt');
+  add('Quelle',entry.source||'');add('Notiz',entry.note||entry.notes||'');
+  if(Array.isArray(entry.attachments)&&entry.attachments.length)add('Anhänge',entry.attachments.map(f=>f.name||'Anhang').join(', '));
+ }
+ document.getElementById('vk210-point-dialog')?.remove();
+ vk210Focus=point;
+ const dialog=document.createElement('div');dialog.id='vk210-point-dialog';dialog.className='vk210-point-dialog';
+ dialog.setAttribute('role','dialog');dialog.setAttribute('aria-modal','true');dialog.setAttribute('aria-label','Messwertdetails');
+ dialog.innerHTML=`<section class="vk210-point-card"><header><strong>${entry?'Gespeicherte Originalmessung':'Diagramminformation'}</strong><button type="button" data-vk210-close>Schließen</button></header><dl>${pairs.map(([k,v])=>`<div><dt>${h(k)}</dt><dd>${h(v)}</dd></div>`).join('')}</dl><p>${h(info)}</p><small>${entry?'Alle verfügbaren Angaben aus dem lokalen Speicher.':'Zu diesem Punkt ist keine einzelne Originalmessung verknüpft.'}</small></section>`;
+ document.body.appendChild(dialog);
+ const close=()=>{dialog.remove();if(vk210Focus?.isConnected)vk210Focus.focus?.();vk210Focus=null};
+ dialog.addEventListener('click',e=>{if(e.target===dialog||e.target.closest('[data-vk210-close]'))close()});
+ dialog.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();close()}});
+ dialog.querySelector('[data-vk210-close]')?.focus();
+}
+function vk210EnhanceCharts(){
+ const main=document.getElementById('main');if(!main)return;
+ main.querySelectorAll('.chartwrap').forEach(wrap=>{
+  const points=[...wrap.querySelectorAll('svg.chart [data-chart-info]')];if(!points.length)return;
+  const list=document.createElement('details');list.className='vk210-point-list';
+  const summary=document.createElement('summary');summary.textContent='Alle '+points.length+' Messpunkte einzeln ansehen';list.appendChild(summary);
+  list.addEventListener('toggle',()=>{
+   if(!list.open||list.dataset.ready)return;
+   for(const pt of points){
+    const button=document.createElement('button');button.type='button';button.className='vk210-point-item';button.dataset.vk210ListPoint='1';button.dataset.chartInfo=pt.dataset.chartInfo||'Messwert';
+    if(pt.dataset.vk210Id)button.dataset.vk210Id=pt.dataset.vk210Id;
+    button.textContent=pt.dataset.chartInfo||'Messwert';list.appendChild(button);
+   }
+   list.dataset.ready='1';
+  });
+  wrap.after(list);
+  if(wrap.classList.contains('vk207-glucose-wrap')&&wrap.scrollWidth>wrap.clientWidth){
+   const note=document.createElement('p');note.className='vk210-scroll-note';note.textContent='Für alle Werte seitlich wischen oder die Messpunktliste öffnen.';wrap.before(note);wrap.scrollLeft=wrap.scrollWidth;
+  }
+ });
+}
+
 function vk207EnhanceCharts(){
  const main=document.getElementById('main');if(!main)return;
  main.querySelectorAll('.chartwrap').forEach(wrap=>{
@@ -1131,7 +1192,7 @@ function vk207OpenZoom(button){
  modal.innerHTML=`<div class="vk207-dialog"><div class="vk207-dialog-header"><strong></strong><div class="vk207-dialog-actions"><button type="button" data-vk207-minus aria-label="Verkleinern">−</button><span class="vk207-percent" aria-live="polite">100 %</span><button type="button" data-vk207-plus aria-label="Vergrößern">+</button><button type="button" data-vk207-reset>100 %</button><button type="button" data-vk207-close>Schließen</button></div></div><p class="vk207-zoom-hint">Mit + und − vergrößern oder verkleinern, mit dem Finger im Diagramm verschieben. Zwei Finger zum Zoomen möglich. Auf einen Punkt tippen zeigt den Originalwert.</p><div class="vk207-zoom-viewport" tabindex="0" aria-label="Vergrößertes Diagramm, horizontal und vertikal verschiebbar"><div class="vk207-zoom-canvas"></div></div></div>`;
  modal.querySelector('strong').textContent=heading;
  const canvas=modal.querySelector('.vk207-zoom-canvas'),viewport=modal.querySelector('.vk207-zoom-viewport');
- canvas.appendChild(source.cloneNode(true));
+ const vk210Clone=source.cloneNode(true);vk210Clone.removeAttribute('style');canvas.appendChild(vk210Clone);
  document.body.appendChild(modal);document.body.classList.add('vk207-zoom-active');
  let scale=1;
  function setScale(next){
@@ -1150,7 +1211,7 @@ function vk207OpenZoom(button){
   if(e.target.closest('[data-vk207-plus]')){setScale(scale+.5);return}
   if(e.target.closest('[data-vk207-minus]')){setScale(scale-.5);return}
   if(e.target.closest('[data-vk207-reset]')){setScale(1);viewport.scrollTo(0,0);return}
-  const pt=e.target.closest('[data-chart-info]');if(pt){toast(pt.dataset.chartInfo||'Messwert');return}
+  const pt=e.target.closest('[data-chart-info]');if(pt){vk210OpenPoint(pt);return}
   if(e.target===modal)vk207CloseZoom();
  });
  modal.addEventListener('keydown',e=>{
@@ -1592,8 +1653,8 @@ if(action==='check-update'){await checkUpdate();return}
 if(action==='install-update'){await saveQueue;let reg=await navigator.serviceWorker?.getRegistration();if(!reg?.waiting){await checkUpdate();reg=await navigator.serviceWorker?.getRegistration();}if(reg?.waiting){vkApprovedUpdateReload=true;reg.waiting.postMessage('SKIP_WAITING');const label=$('#update-status');if(label)label.textContent='Update wird nach abgeschlossenen Speichervorgängen aktiviert.';}else toast('Kein Update wartet auf Installation.');return}
 if(action==='wipe'){if(weightSaveInProgress)throw Error('Die Gewichtsmessung wird noch gespeichert. Bitte warten und die Aktion anschließend wiederholen.');if(!confirm('ALLE GESUNDHEITSDATEN dieses Geräts endgültig löschen? Nur mit einem externen Backup wiederherstellbar.'))return;if(!confirm('Wirklich alle Daten löschen? Diese Aktion kann nicht rückgängig gemacht werden.'))return;await saveQueue;discardTemporaryPDF();bridgePreview=null;await new Promise((resolve,reject)=>{const t=db.transaction(STORE,'readwrite');t.objectStore(STORE).delete(KEY);t.objectStore(STORE).delete(WEIGHT_DRAFT_KEY);t.objectStore(STORE).delete(WEIGHT_JOURNAL_KEY);t.oncomplete=resolve;t.onerror=()=>reject(t.error)});data=null;key=null;authPage(false);return}
 }catch(e){alert(e.message||'Aktion fehlgeschlagen')}}
-root.addEventListener('click',e=>{if(e.target.closest('[data-vk203-open]')){vk203OpenDrawer();return}if(e.target.closest('[data-vk203-close]')||e.target.closest('[data-vk203-close-inside]')){vk203CloseDrawer();return}const openZoom=e.target.closest('[data-vk207-open]');if(openZoom){vk207OpenZoom(openZoom);return}const gf=e.target.closest('[data-vk207-glucose]');if(gf){const choice=gf.dataset.vk207Glucose;if(['all','fasting','before','after'].includes(choice)){vk207GlucoseFilter=choice;renderMain()}return}const point=e.target.closest('[data-chart-info]');if(point){toast(point.dataset.chartInfo||'Messwert');return}const navButton=e.target.closest('[data-view]');if(navButton){vk203CloseDrawer(false);view=navButton.dataset.view;labQuery='';common();window.scrollTo(0,0);return}const period=e.target.closest('[data-report]');if(period){reportPeriod=period.dataset.report;renderMain();return}const periodAnalysis=e.target.closest('[data-analysis-days]');if(periodAnalysis){analysisDays=periodAnalysis.dataset.analysisDays;renderMain();return}const chartPeriod=e.target.closest('[data-chart-period]');if(chartPeriod){const t=chartPeriod.dataset.chartType,period=chartPeriod.dataset.chartPeriod;if(Object.prototype.hasOwnProperty.call(chartPeriods,t)&&CHART_PERIODS.some(x=>x[0]===period)){chartPeriods[t]=period;renderMain()}return}const chart=e.target.closest('[data-chart-days]');if(chart){chartWindow=chart.dataset.chartDays;renderMain();return}const action=e.target.closest('[data-action]');if(action)doAction(action)});
-root.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.target?.matches?.('[data-chart-info]')){e.preventDefault();toast(e.target.dataset.chartInfo||'Messwert')}});
+root.addEventListener('click',e=>{if(e.target.closest('[data-vk203-open]')){vk203OpenDrawer();return}if(e.target.closest('[data-vk203-close]')||e.target.closest('[data-vk203-close-inside]')){vk203CloseDrawer();return}const openZoom=e.target.closest('[data-vk207-open]');if(openZoom){vk207OpenZoom(openZoom);return}const gf=e.target.closest('[data-vk207-glucose]');if(gf){const choice=gf.dataset.vk207Glucose;if(['all','fasting','before','after'].includes(choice)){vk207GlucoseFilter=choice;renderMain()}return}const listPoint=e.target.closest('[data-vk210-list-point]');if(listPoint){vk210OpenPoint(listPoint);return}const point=e.target.closest('[data-chart-info]');if(point){vk210OpenPoint(point);return}const navButton=e.target.closest('[data-view]');if(navButton){vk203CloseDrawer(false);view=navButton.dataset.view;labQuery='';common();window.scrollTo(0,0);return}const period=e.target.closest('[data-report]');if(period){reportPeriod=period.dataset.report;renderMain();return}const periodAnalysis=e.target.closest('[data-analysis-days]');if(periodAnalysis){analysisDays=periodAnalysis.dataset.analysisDays;renderMain();return}const chartPeriod=e.target.closest('[data-chart-period]');if(chartPeriod){const t=chartPeriod.dataset.chartType,period=chartPeriod.dataset.chartPeriod;if(Object.prototype.hasOwnProperty.call(chartPeriods,t)&&CHART_PERIODS.some(x=>x[0]===period)){chartPeriods[t]=period;renderMain()}return}const chart=e.target.closest('[data-chart-days]');if(chart){chartWindow=chart.dataset.chartDays;renderMain();return}const action=e.target.closest('[data-action]');if(action)doAction(action)});
+root.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.target?.matches?.('[data-chart-info]')){e.preventDefault();vk210OpenPoint(e.target)}});
 document.addEventListener('keydown',e=>{if(!document.body.classList.contains('vk203-drawer-open'))return;if(e.key==='Escape'){e.preventDefault();vk203CloseDrawer();return}if(e.key!=='Tab')return;const drawer=$('#vk203-drawer');if(!drawer)return;const focusable=$$('button:not([hidden]):not(:disabled), input:not([hidden]):not(:disabled)',drawer).filter(x=>!x.closest('[hidden]'));if(!focusable.length)return;const first=focusable[0],last=focusable.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus()}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus()}});
 root.addEventListener('submit',handleSubmit);
 root.addEventListener('change',e=>{if(e.target.matches('#weight-meal-filter')){weightMealFilter=e.target.value;renderMain();return}if(e.target.matches('[data-lab-chart]')){chosenLabTrend=e.target.value;renderMain()}});

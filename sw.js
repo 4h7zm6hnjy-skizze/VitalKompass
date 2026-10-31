@@ -1,5 +1,5 @@
-/* VitalKompass 2.0.9: measurement editing and encrypted attachments; network-first code updates and offline fallback. */
-const CACHE='vital-kompass-2.0.9-fasting-filter-fix';
+/* VitalKompass 2.0.10: measurement editing and encrypted attachments; network-first code updates and offline fallback. */
+const CACHE='vital-kompass-2.0.10-repair-checked';
 const FILES=['./','./index.html','./style.css','./pdf-export.js','./vkpro.js','./app.js','./icon.svg','./icon-192.png','./icon-512.png','./manifest.webmanifest','./version.json'];
 self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(FILES))));
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('vital-kompass-')&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));

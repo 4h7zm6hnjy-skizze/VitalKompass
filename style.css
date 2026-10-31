@@ -493,3 +493,20 @@ body.vk207-zoom-active{overflow:hidden}
 
 /* VitalKompass 2.0.8: Vier Essensfilter auf breiten Bildschirmen in einer Zeile. */
 @media (min-width:720px){.vk207-filter-buttons{grid-template-columns:repeat(4,minmax(0,1fr))}}
+
+/* VitalKompass 2.0.10: Einzelwerte und antippbare Punktdetails */
+#main .vk207-glucose-wrap{overflow-x:auto!important;overflow-y:hidden!important;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y}
+#main .vk207-glucose-wrap svg.chart{height:410px!important;max-width:none!important;display:block}
+.vk210-scroll-note{margin:7px 0;color:#265777;font-weight:650}
+.vk210-point-list{margin:9px 0 18px;padding:8px 12px;background:#f3f9fc;border:1px solid #b7cedd;border-radius:12px}
+.vk210-point-list summary{cursor:pointer;min-height:45px;padding:11px 3px;font-weight:750;color:#0c547d}
+.vk210-point-item{display:block;width:100%;margin-bottom:8px;padding:12px;border:1px solid #bbd3df;border-radius:10px;background:#fff;color:#17405c;text-align:left;min-height:46px;white-space:normal;overflow-wrap:anywhere}
+.vk210-point-dialog{position:fixed;inset:0;z-index:10010;background:#071d31c9;display:grid;place-items:center;padding:14px}
+.vk210-point-card{width:min(100%,570px);max-height:90dvh;overflow-y:auto;background:white;color:#183d56;padding:18px;border-radius:17px}
+.vk210-point-card header{display:flex;justify-content:space-between;align-items:center;gap:9px}
+.vk210-point-card header strong{font-size:1.09rem}
+.vk210-point-card header button{padding:11px;background:#136a87;color:white;border-radius:9px;border:0;min-height:44px}
+.vk210-point-card dl>div{display:grid;grid-template-columns:37% 1fr;gap:10px;border-bottom:1px solid #e3edf4;padding:10px 0;overflow-wrap:anywhere}
+.vk210-point-card dt{font-weight:600;color:#527185}
+.vk210-point-card dd{margin:0;font-weight:750}
+@media print{.vk210-point-list,.vk210-point-dialog,.vk210-scroll-note{display:none!important}#main .vk207-glucose-wrap{overflow:visible!important}#main .vk207-glucose-wrap svg.chart{max-width:100%!important;width:100%!important;min-width:0!important;height:auto!important}}

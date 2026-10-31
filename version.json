@@ -1,5 +1,5 @@
 {
-  "version": "2.0.9",
+  "version": "2.0.10",
   "released": "2026-10-31",
-  "notes": "Fehler behoben: Der sichtbare Filter Nüchtern reagiert auf Berührung. Alle zusammen, Nüchtern, Vor/Nach dem Essen und Letzte 7 Tage bleiben erhalten. Diagramm-Zoom und lokale verschlüsselte Patientendaten bleiben unverändert."
+  "notes": "Blutzuckerdiagramm mit allen gespeicherten Einzelpunkten und lesbaren Zahlen; seitliches Scrollen; anklickbare Detailansicht und vollstaendige Punktliste. Keine Datenbank-Aenderung."
 }
