@@ -1,0 +1,203 @@
+name: VitalKompass 2.0.8 - Nuechternfilter und letzte 7 Tage
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/VitalKompass_2.0.8_Nuechtern_7Tage.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vitalkompass-208-glucose-period-fix
+  cancel-in-progress: false
+
+jobs:
+  update-sicher-anwenden:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Repository laden
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: true
+
+      - name: Ausgangsversion pruefen und Anzeige aktualisieren
+        shell: bash
+        run: |
+          python3 - <<'PY_VK208'
+          from pathlib import Path
+          import hashlib, json
+
+          path = Path('app.js')
+          raw = path.read_bytes()
+          app = raw.decode('utf-8')
+          current_version = json.loads(Path('version.json').read_text(encoding='utf-8')).get('version')
+          if "const VERSION='2.0.8'" in app and current_version == '2.0.8':
+              print('VitalKompass 2.0.8 ist bereits installiert; keine erneute Installation.')
+              raise SystemExit(0)
+
+          git_sha = hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest()
+          expected = 'f2b8330cdea59fb96173509c6c4b996bbc4c00ba'
+          if git_sha != expected or current_version != '2.0.7':
+              raise RuntimeError('App-Version weicht von der geprueften 2.0.7 ab. Keine unsichere Ueberschreibung. SHA: '+git_sha+'; Version: '+str(current_version))
+
+          css = Path('style.css').read_text(encoding='utf-8')
+          sw = Path('sw.js').read_text(encoding='utf-8')
+          meta = json.loads(Path('version.json').read_text(encoding='utf-8'))
+
+          def once(text, old, new, label):
+              count = text.count(old)
+              if count != 1:
+                  raise RuntimeError(label+': genau 1 Quellstelle erforderlich, gefunden '+str(count))
+              return text.replace(old, new)
+
+          app = once(app, "const VERSION='2.0.7'", "const VERSION='2.0.8'", 'App-Versionsnummer')
+          app = once(
+              app,
+              "const CHART_PERIODS=[['day','Tag'],['week','Woche'],['month','Monat'],['year','Jahr'],['ten','10 Jahre']];",
+              "const CHART_PERIODS=[['day','Tag'],['last7','Letzte 7 Tage'],['week','Woche'],['month','Monat'],['year','Jahr'],['ten','10 Jahre']];",
+              'Zeitwahl einschliesslich letzter sieben Tage'
+          )
+          app = once(
+              app,
+              "const options=[['all','Alle zusammen'],['before','Vor dem Essen'],['after','Nach dem Essen']];",
+              "const options=[['all','Alle zusammen'],['fasting','Nüchtern'],['before','Vor dem Essen'],['after','Nach dem Essen']];",
+              'Nuechtern-Filter'
+          )
+          app = once(
+              app,
+              'Nüchtern und Sonstige erscheinen nur bei „Alle zusammen“. Keine Messwerte werden geändert oder gelöscht.',
+              'Nüchtern ist separat auswählbar. Sonstige Messungen erscheinen bei „Alle zusammen“. Keine Messwerte werden geändert oder gelöscht.',
+              'Filter-Erklaerung'
+          )
+          # Existierende Auswahl-Logik (selection==='all'||r.period===selection) bleibt erhalten:
+          # fasting/before/after sind voneinander getrennt; all zeigt jede Kategorie.
+          if "(selection==='all'||r.period===selection)" not in app:
+              raise RuntimeError('Sichere Messkategorie-Filterlogik fehlt; keine Aenderung.')
+          if "if(period==='last7'){const x=new Date(y,m,day);x.setDate(x.getDate()-6);return fmt(x)}" not in app:
+              raise RuntimeError('Sieben-Tage-Datumslogik fehlt; keine Aenderung.')
+
+          css = once(
+              css,
+              '.vk207-filter-buttons{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}',
+              '.vk207-filter-buttons{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}',
+              'Zweispaltige Filterauswahl fuer iPhone'
+          )
+          css += '\n/* VitalKompass 2.0.8: Vier Essensfilter auf breiten Bildschirmen in einer Zeile. */\n@media (min-width:720px){.vk207-filter-buttons{grid-template-columns:repeat(4,minmax(0,1fr))}}\n'
+          sw = once(sw, 'const CACHE=\'vital-kompass-2.0.7-filters-zoom\';', "const CACHE='vital-kompass-2.0.8-fasting-last7';", 'Offline-Cache')
+          sw = once(sw, 'VitalKompass 2.0.7:', 'VitalKompass 2.0.8:', 'Cache-Kommentar')
+          meta['version'] = '2.0.8'
+          meta['released'] = '2026-10-31'
+          meta['notes'] = ('Blutzuckerfilter: Alle zusammen, Nüchtern, Vor dem Essen, Nach dem Essen. '
+                           'Letzte 7 Tage als zusaetzlicher Zeitraum in allen Diagrammen. '
+                           'Bestehende Zoombedienung und Originalmesswerte bleiben erhalten; '
+                           'keine Aenderung am verschluesselten Datenspeicher.')
+
+          # Schreiben erst nach allen Quellstands- und Ankerpruefungen.
+          path.write_text(app, encoding='utf-8')
+          Path('style.css').write_text(css, encoding='utf-8')
+          Path('sw.js').write_text(sw, encoding='utf-8')
+          Path('version.json').write_text(json.dumps(meta, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
+          print('VitalKompass 2.0.8: Nüchtern und Letzte 7 Tage aktiviert; Gesundheitsdaten unveraendert.')
+          PY_VK208
+
+      - name: Syntax, Filter, Datenintegritaet und Zeitraum pruefen
+        shell: bash
+        run: |
+          node --check app.js
+          node --check sw.js
+          python3 -m json.tool version.json > /dev/null
+          node - <<'NODE_VK208'
+          'use strict';
+          const fs=require('node:fs'), assert=require('node:assert/strict'), vm=require('node:vm');
+          const app=fs.readFileSync('app.js','utf8');
+          const css=fs.readFileSync('style.css','utf8');
+          const sw=fs.readFileSync('sw.js','utf8');
+          const version=JSON.parse(fs.readFileSync('version.json','utf8'));
+          assert.equal(version.version,'2.0.8');
+          assert(app.includes("const VERSION='2.0.8'"));
+          assert(app.includes("DB='vitalkompass-secure-v1'"));
+          assert(sw.includes("const CACHE='vital-kompass-2.0.8-fasting-last7'"));
+          assert(css.includes('.vk207-filter-buttons{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}'));
+          assert(app.includes('vk207OpenZoom(openZoom)'),'Vorhandener Vollbild-Zoom muss erhalten bleiben.');
+
+          const match=app.match(/const CHART_PERIODS=(\[[^\n;]+\]);/);
+          assert(match,'CHART_PERIODS nicht gefunden');
+          const periods=vm.runInNewContext(match[1]);
+          assert.equal(JSON.stringify(periods.map(x=>x[0])),JSON.stringify(['day','last7','week','month','year','ten']));
+          const start=app.indexOf('function chartMinDate('),stop=app.indexOf('\nfunction chartBucket(',start);
+          assert(start>=0&&stop>start);
+          const dateFunc=new Function(app.slice(start,stop)+'\nreturn chartMinDate;')();
+          const d=new Date();d.setDate(d.getDate()-6);
+          const expected=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+          assert.equal(dateFunc('last7'),expected,'Letzte 7 Tage schliesst heute und sechs Vortage ein');
+
+          const a=app.indexOf('function vk207GlucosePicker(){'),b=app.indexOf('\nfunction vk207GlucoseChart(',a);
+          assert(a>=0&&b>a,'Glukosefilterfunktion fehlt');
+          const picker=app.slice(a,b);
+          for(const choice of ['all','fasting','before','after']){
+            const html=new Function('vk207GlucoseFilter',picker+'\nreturn vk207GlucosePicker();')(choice);
+            assert.equal((html.match(/data-vk207-glucose="/g)||[]).length,4);
+            for(const other of ['all','fasting','before','after'])assert(html.includes(`data-vk207-glucose="${other}"`));
+            assert(html.includes(`data-vk207-glucose="${choice}" class="active"`));
+          }
+          assert(!picker.includes('Nüchtern und Sonstige erscheinen nur bei'),'Veraltete Erklaerung darf nicht mehr erscheinen.');
+
+          const chartStart=app.indexOf('function vk207GlucoseChart(');
+          const chartEnd=app.indexOf('\n/* Gemeinsamer lokaler Diagramm-Zoom',chartStart);
+          assert(chartStart>=0&&chartEnd>chartStart,'Blutzuckerdiagramm fehlt');
+          const chartFn=app.slice(chartStart,chartEnd);
+          assert(chartFn.includes("(selection==='all'||r.period===selection)"),'Filterlogik muss unveraendert sein');
+          const fixture=[
+            {type:'glucose',date:'2026-10-28',time:'07:10',mgdl:114,period:'fasting',verified:true},
+            {type:'glucose',date:'2026-10-28',time:'12:00',mgdl:124,period:'before',verified:true},
+            {type:'glucose',date:'2026-10-29',time:'15:00',mgdl:162,period:'after',verified:true},
+            {type:'glucose',date:'2026-10-30',time:'20:00',mgdl:101,period:'other',verified:true}
+          ];
+          const original=JSON.stringify(fixture);
+          function chartFor(selection){
+            return new Function('items','selection',`
+              const vk207GlucoseFilter=selection,reportPeriod='month';
+              const CHART_PERIODS=[['last7','Letzte 7 Tage']];
+              const chartPeriods={glucose:'last7'}, chartMinDate=()=> '2026-10-25';
+              const today=()=> '2026-10-31', filtered=()=>items;
+              const sortdate=(a,b)=>(a.date+'T'+a.time).localeCompare(b.date+'T'+b.time);
+              const gLabels={fasting:'Nüchtern',before:'Vor dem Essen',after:'Nach dem Essen',other:'Sonstige'};
+              const colors={fasting:'#176bb3',before:'#8659a3',after:'#e56b37',other:'#0d8970'};
+              const thresholdDefs=()=>[],chartTraffic=()=>({label:'Orientierungswert'});
+              const h=x=>String(x),nf=(x)=>String(x),fmtDate=x=>x,vk205PointLabels=()=>'';
+              ${chartFn}
+              return vk207GlucoseChart('last7');
+            `)(fixture,selection);
+          }
+          for(const [choice,count] of [['all',4],['fasting',1],['before',1],['after',1]]){
+            const html=chartFor(choice);
+            assert.equal((html.match(/<circle cx=/g)||[]).length,count,choice+' zeigt falsche Messpunkte');
+            assert(html.includes(`${count} gespeicherte Einzelmessung`),choice+' falsche Messanzahl');
+            assert.equal((html.match(/<polyline points=/g)||[]).length,count>1?1:0);
+          }
+          assert(chartFor('fasting').includes('114 mg/dl'));
+          assert(!chartFor('fasting').includes('162 mg/dl'));
+          assert(!chartFor('before').includes('114 mg/dl'));
+          assert(!chartFor('after').includes('124 mg/dl'));
+          assert.equal(JSON.stringify(fixture),original,'Tests duerfen Messwerte nicht aendern');
+          assert(app.includes('data-chart-period')&&app.includes('chartPeriods[t]=period;renderMain()'));
+          console.log('OK: 4 Filter inklusive Nüchtern, 6 Zeitraeume inklusive letzter 7 Tage, 4 getrennte Originaldatensaetze, Zoom, Offline, unveraenderte Datenbank.');
+          NODE_VK208
+
+      - name: Vier Programmdateien aktualisieren
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.js style.css sw.js version.json
+          if git diff --cached --quiet; then
+            echo '2.0.8 bereits aktuell, kein neuer Commit.'
+          else
+            git commit -m 'VitalKompass 2.0.8: Nuechternfilter und letzte 7 Tage'
+            git push origin HEAD:main
+          fi
