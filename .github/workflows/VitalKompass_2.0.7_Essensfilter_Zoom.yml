@@ -1,0 +1,163 @@
+name: VitalKompass 2.0.7 - Essensfilter und Diagramm-Zoom
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/VitalKompass_2.0.7_Essensfilter_Zoom.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vitalkompass-207-filter-zoom
+  cancel-in-progress: false
+
+jobs:
+  filter-zoom-installieren:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Repository laden
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: true
+      - name: Nur geprueften App-Stand aktualisieren
+        shell: bash
+        run: |
+          python3 - <<'PY_VK207'
+          from pathlib import Path
+          import json,hashlib
+
+          def blob_sha(p):
+              b=Path(p).read_bytes()
+              return hashlib.sha1(('blob '+str(len(b))+'\0').encode()+b).hexdigest()
+          expected={'app.js':'076d88dc1fd2d03338fefc2a74c01ae9b08d3218','style.css':'183ca2df5933744333bdd0da6859893772e880f7','sw.js':'d527c930ef640c6938ab2b0e5bd5e4d4e22cd552','version.json':'9970ccc67cbfb54bb444f0e68b770415ef903396'}
+          app=Path('app.js').read_text(encoding='utf-8')
+          version=json.loads(Path('version.json').read_text(encoding='utf-8'))
+          if "const VERSION='2.0.7'" in app and version.get('version')=='2.0.7':
+              print('VitalKompass 2.0.7 bereits installiert. Kein zweiter Patch.')
+              raise SystemExit(0)
+          for file,hash_expected in expected.items():
+              actual=blob_sha(file)
+              if actual!=hash_expected:
+                  raise RuntimeError('Quelldatei weicht von gepruefter Version 2.0.6 ab: '+file+' '+actual+'; aus Sicherheitsgruenden Abbruch.')
+          if version.get('version')!='2.0.6':
+              raise RuntimeError('version.json nicht 2.0.6. Kein Ueberschreiben.')
+
+          def one(old,new,label):
+              global app
+              n=app.count(old)
+              if n!=1:raise RuntimeError(label+': erwartete genau einen Anker, gefunden '+str(n))
+              app=app.replace(old,new)
+          one("const VERSION='2.0.6'","const VERSION='2.0.7'",'Version')
+          # Nur Diagrammansicht: Interaktive Auswahl; keine neue Messdatenkategorie, keine Import-Aenderung.
+          start=app.index('function chartPicker(type){')
+          end=app.index('\nfunction chartMinDate(',start)
+          original_picker=app[start:end]
+          if not original_picker.endswith('}') or 'CHART_PERIODS.map' not in original_picker or 'data-chart-period' not in original_picker:
+              raise RuntimeError('Diagramm-Zeitraumwahl weicht ab.')
+          app=app[:start]+original_picker[:-1]+"+(type==='glucose'?vk207GlucosePicker():'')}"+app[end:]
+          start=app.index('function vk206GlucoseChart(')
+          end=app.index('function lineChart(',start)
+          if start<0 or end<=start or 'Keine Verdichtung, Mittelung' not in app[start:end]:
+              raise RuntimeError('Blutzucker-Originaldiagramm nicht wie erwartet gefunden.')
+          glucose_js='/* VitalKompass 2.0.7 – echte Einzelwerte, Essensfilter, groessere Achsen und zoomfaehige SVG-Ansicht. */\nlet vk207GlucoseFilter=\'all\';\nfunction vk207GlucosePicker(){\n const options=[[\'all\',\'Alle zusammen\'],[\'before\',\'Vor dem Essen\'],[\'after\',\'Nach dem Essen\']];\n return `<div class="vk207-filter" role="group" aria-label="Blutzuckermessungen nach Essenszeitpunkt filtern"><span class="vk207-filter-title">Messwerte anzeigen</span><div class="vk207-filter-buttons">${options.map(([key,label])=>`<button type="button" data-vk207-glucose="${key}" class="${vk207GlucoseFilter===key?\'active\':\'\'}" aria-pressed="${vk207GlucoseFilter===key}">${label}</button>`).join(\'\')}</div><small>Nüchtern und Sonstige erscheinen nur bei „Alle zusammen“. Keine Messwerte werden geändert oder gelöscht.</small></div>`;\n}\nfunction vk207GlucoseChart(days=\'month\',wide=720,preloaded=null){\n const period=preloaded!==null?(reportPeriod===\'year\'?\'year\':\'month\'):(CHART_PERIODS.some(x=>x[0]===days)?days:(chartPeriods.glucose||\'month\'));\n const minDate=chartMinDate(period),source=preloaded!==null?preloaded:filtered(\'glucose\');\n const showFilter=preloaded===null,selection=showFilter?vk207GlucoseFilter:\'all\';\n // Der Filter beeinflusst ausschliesslich die Darstellung. Keine Datenveraenderung, keine Mittelwerte.\n const rows=[...source].filter(r=>r&&\n  (r.type===undefined||r.type===\'glucose\')&&\n  typeof r.date===\'string\'&&/^\\d{4}-\\d{2}-\\d{2}$/.test(r.date)&&\n  Number.isFinite(r.mgdl)&&r.mgdl>0&&r.mgdl<=999&&\n  (preloaded!==null||(r.date>=minDate&&r.date<=today()))&&\n  (selection===\'all\'||r.period===selection)\n ).sort(sortdate);\n const legend=`<div class="vk207-chart-legend"><span><i style="background:#184f83"></i>Chronologischer Verlauf</span>${Object.keys(gLabels).filter(k=>selection===\'all\'||k===selection).map(k=>`<span><i style="background:${colors[k]}"></i>${h(gLabels[k])}</span>`).join(\'\')}<span><i class="vk207-open-dot"></i>Offen = noch nicht bestätigt</span></div>`;\n if(!rows.length)return `<div class="vk207-no-values" role="status">Für diese Auswahl sind keine gespeicherten Messwerte vorhanden.</div>${legend}`;\n // Eine hohe Diagrammflaeche und dynamische, sichtbare Skala mit 9 waagerechten Hilfslinien.\n // Bei PDF-Berichten bleiben die breiteren A4-Masse erhalten.\n const W=preloaded!==null?720:460,H=preloaded!==null?350:410,L=49,R=14,T=29,B=58;\n const plotW=W-L-R,plotH=H-T-B,values=rows.map(r=>r.mgdl),vmin=Math.min(...values),vmax=Math.max(...values);\n let lo=Math.max(0,Math.floor((vmin-8)/10)*10),hi=Math.ceil((vmax+8)/10)*10;\n if(hi-lo<40){const mid=(lo+hi)/2;lo=Math.max(0,Math.floor((mid-20)/10)*10);hi=Math.ceil((mid+20)/10)*10}\n if(hi<=lo)hi=lo+40;\n const y=v=>T+plotH-((v-lo)/(hi-lo))*plotH;\n const times=rows.map(r=>Date.parse(`${r.date}T${/^\\d{2}:\\d{2}$/.test(r.time||\'\')?r.time:\'12:00\'}:00`));\n const useTime=times.every(Number.isFinite)&&times.length>1&&times.at(-1)>times[0];\n const x=i=>L+(rows.length===1?plotW/2:useTime?plotW*(times[i]-times[0])/(times.at(-1)-times[0]):plotW*i/(rows.length-1));\n const count=9;\n const grid=Array.from({length:count},(_,i)=>{const v=lo+(hi-lo)*i/(count-1),py=y(v);return `<line x1="${L}" y1="${py}" x2="${W-R}" y2="${py}" stroke="#dde9f0"/><text x="${L-6}" y="${py+4.5}" font-size="13" text-anchor="end" fill="#365366">${nf(v,0)}</text>`}).join(\'\');\n const guides=thresholdDefs(\'glucose\').filter(([v])=>v>=lo&&v<=hi).map(([v,label,col])=>`<line x1="${L}" y1="${y(v)}" x2="${W-R}" y2="${y(v)}" stroke="${col}" stroke-dasharray="6 5" stroke-width="1.6" opacity=".8"><title>${h(label)}: ${nf(v)} mg/dl</title></line>`).join(\'\');\n const points=rows.length>1?`<polyline points="${rows.map((r,i)=>`${x(i)},${y(r.mgdl)}`).join(\' \')}" fill="none" stroke="#184f83" stroke-width="3.1" stroke-linejoin="round" stroke-linecap="round"/>`:\'\';\n const dots=rows.map((r,i)=>{\n  const kind=Object.prototype.hasOwnProperty.call(gLabels,r.period)?r.period:\'other\';\n  const color=colors[kind];\n  const classificationText=chartTraffic(\'glucose\',r,kind).label;\n  const label=`${gLabels[kind]} · ${nf(r.mgdl,1)} mg/dl · ${fmtDate(r.date)} ${r.time||\'\'} · ${classificationText} · ${r.verified===true?\'bestätigt\':\'noch unbestätigt\'}${r.note?\' · \'+r.note:\'\'}`;\n  return `<circle cx="${x(i)}" cy="${y(r.mgdl)}" r="5.4" fill="${r.verified===true?color:\'#fff\'}" stroke="${color}" stroke-width="${r.verified===true?\'1.5\':\'2.7\'}" class="vk-chart-point" role="button" tabindex="0" data-chart-info="${h(label)}"><title>${h(label)}</title></circle>`;\n }).join(\'\');\n // 9 Skalenmarken plus bis zu 18 abstandsgesicherte Originalwert-Beschriftungen.\n const labelRows=rows.map((r,i)=>({x:x(i),y:y(r.mgdl),v:r.mgdl}));\n const labels=vk205PointLabels(labelRows,W,H,L,R,T,B,1);\n const indices=[0,Math.floor((rows.length-1)/2),rows.length-1].filter((v,i,a)=>a.indexOf(v)===i);\n const ticks=indices.map(i=>`<text x="${x(i)}" y="${H-23}" text-anchor="${i===0?\'start\':i===rows.length-1?\'end\':\'middle\'}" font-size="12.5" fill="#365366">${fmtDate(rows[i].date)}</text>`).join(\'\');\n const unverified=rows.filter(r=>r.verified!==true).length;\n return `<div class="chartwrap vk207-glucose-wrap"><svg class="chart" role="img" aria-label="Blutzucker: ${rows.length} echte Einzelmessungen, Auswahl ${h(selection)}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">${grid}${guides}<line x1="${L}" y1="${T}" x2="${L}" y2="${H-B}" stroke="#708da0"/>${points}${dots}${labels}${ticks}<text x="${L}" y="${H-7}" font-size="12" fill="#395b70">mg/dl · ${rows.length} Messung${rows.length===1?\'\':\'en\'}</text></svg></div>${legend}<p class="section-note">${rows.length} gespeicherte Einzelmessung${rows.length===1?\'\':\'en\'} · ${unverified} noch nicht bestätigt. Nur echte Messwerte, keine Mittelwerte. Tippe auf einen Messpunkt für Datum, Uhrzeit und Details. Zum Vergrößern „Diagramm groß ansehen“ wählen.</p>`;\n}\n'
+          zoom_js='/* Gemeinsamer lokaler Diagramm-Zoom – fuer Blutzucker, Blutdruck, Gewicht, Puls, SpO2 usw. */\nfunction vk207EnhanceCharts(){\n const main=document.getElementById(\'main\');if(!main)return;\n main.querySelectorAll(\'.chartwrap\').forEach(wrap=>{\n  if(!wrap.querySelector(\'svg.chart\')||wrap.dataset.vk207ZoomInstalled)return;\n  wrap.dataset.vk207ZoomInstalled=\'yes\';\n  const toolbar=document.createElement(\'div\');toolbar.className=\'vk207-chart-toolbar\';\n  const button=document.createElement(\'button\');button.type=\'button\';button.className=\'secondary vk207-open-zoom\';button.setAttribute(\'data-vk207-open\',\'\');\n  button.textContent=\'Diagramm groß ansehen / zoomen\';\n  toolbar.appendChild(button);wrap.before(toolbar);\n });\n}\nfunction vk207CloseZoom(){\n const modal=document.getElementById(\'vk207-zoom\');if(!modal)return;\n modal.remove();document.body.classList.remove(\'vk207-zoom-active\');\n if(typeof vk207ZoomReturnFocus?.focus===\'function\'&&vk207ZoomReturnFocus.isConnected)vk207ZoomReturnFocus.focus();\n vk207ZoomReturnFocus=null;\n}\nlet vk207ZoomReturnFocus=null;\nfunction vk207OpenZoom(button){\n const wrap=button.closest(\'.vk207-chart-toolbar\')?.nextElementSibling;\n const source=wrap?.querySelector(\'svg.chart\');if(!source)return;\n vk207CloseZoom();vk207ZoomReturnFocus=button;\n const modal=document.createElement(\'div\');modal.id=\'vk207-zoom\';modal.className=\'vk207-modal\';\n modal.setAttribute(\'role\',\'dialog\');modal.setAttribute(\'aria-modal\',\'true\');modal.setAttribute(\'aria-label\',\'Diagrammvergrößerung\');\n const heading=wrap.closest(\'.panel\')?.querySelector(\'h2\')?.textContent?.trim()||\'Diagramm\';\n modal.innerHTML=`<div class="vk207-dialog"><div class="vk207-dialog-header"><strong></strong><div class="vk207-dialog-actions"><button type="button" data-vk207-minus aria-label="Verkleinern">−</button><span class="vk207-percent" aria-live="polite">100 %</span><button type="button" data-vk207-plus aria-label="Vergrößern">+</button><button type="button" data-vk207-reset>100 %</button><button type="button" data-vk207-close>Schließen</button></div></div><p class="vk207-zoom-hint">Mit + und − vergrößern oder verkleinern, mit dem Finger im Diagramm verschieben. Zwei Finger zum Zoomen möglich. Auf einen Punkt tippen zeigt den Originalwert.</p><div class="vk207-zoom-viewport" tabindex="0" aria-label="Vergrößertes Diagramm, horizontal und vertikal verschiebbar"><div class="vk207-zoom-canvas"></div></div></div>`;\n modal.querySelector(\'strong\').textContent=heading;\n const canvas=modal.querySelector(\'.vk207-zoom-canvas\'),viewport=modal.querySelector(\'.vk207-zoom-viewport\');\n canvas.appendChild(source.cloneNode(true));\n document.body.appendChild(modal);document.body.classList.add(\'vk207-zoom-active\');\n let scale=1;\n function setScale(next){\n  const n=Math.min(5,Math.max(1,Math.round(next*20)/20));\n  const old=scale,centerX=viewport.scrollLeft+viewport.clientWidth/2,centerY=viewport.scrollTop+viewport.clientHeight/2;\n  scale=n;canvas.style.width=`${scale*100}%`;\n  viewport.scrollLeft=Math.max(0,centerX*scale/old-viewport.clientWidth/2);\n  viewport.scrollTop=Math.max(0,centerY*scale/old-viewport.clientHeight/2);\n  modal.querySelector(\'.vk207-percent\').textContent=`${Math.round(scale*100)} %`;\n  modal.querySelector(\'[data-vk207-minus]\').disabled=scale<=1;\n  modal.querySelector(\'[data-vk207-plus]\').disabled=scale>=5;\n }\n setScale(1);\n modal.addEventListener(\'click\',e=>{\n  if(e.target.closest(\'[data-vk207-close]\')){vk207CloseZoom();return}\n  if(e.target.closest(\'[data-vk207-plus]\')){setScale(scale+.5);return}\n  if(e.target.closest(\'[data-vk207-minus]\')){setScale(scale-.5);return}\n  if(e.target.closest(\'[data-vk207-reset]\')){setScale(1);viewport.scrollTo(0,0);return}\n  const pt=e.target.closest(\'[data-chart-info]\');if(pt){toast(pt.dataset.chartInfo||\'Messwert\');return}\n  if(e.target===modal)vk207CloseZoom();\n });\n modal.addEventListener(\'keydown\',e=>{\n  if(e.key===\'Escape\'){e.preventDefault();vk207CloseZoom();return}\n  if(e.key===\'+\'||e.key===\'=\'){e.preventDefault();setScale(scale+.5)}\n  if(e.key===\'-\'){e.preventDefault();setScale(scale-.5)}\n });\n let pinchDistance=0,pinchScale=1;\n viewport.addEventListener(\'touchstart\',e=>{\n  if(e.touches.length===2){pinchDistance=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);pinchScale=scale}\n },{passive:true});\n viewport.addEventListener(\'touchmove\',e=>{\n  if(e.touches.length===2&&pinchDistance>5){e.preventDefault();const distance=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);setScale(pinchScale*distance/pinchDistance)}\n },{passive:false});\n viewport.addEventListener(\'touchend\',e=>{if(e.touches.length<2)pinchDistance=0},{passive:true});\n modal.querySelector(\'[data-vk207-close]\').focus();\n}\n'
+          app=app[:start]+glucose_js+'\n'+zoom_js+'\n'+app[end:]
+          one("if(type==='glucose')return vk206GlucoseChart(days,wide,preloaded);","if(type==='glucose')return vk207GlucoseChart(days,wide,preloaded);",'Glukose-Zeichenfunktion')
+          one("formatMobileTables($('#main'))}","formatMobileTables($('#main'));vk207EnhanceCharts()}",'Zoom-Schaltflaechen nach jeder Seitenanzeige')
+          one("const point=e.target.closest('[data-chart-info]');if(point)","const openZoom=e.target.closest('[data-vk207-open]');if(openZoom){vk207OpenZoom(openZoom);return}const gf=e.target.closest('[data-vk207-glucose]');if(gf){const choice=gf.dataset.vk207Glucose;if(['all','before','after'].includes(choice)){vk207GlucoseFilter=choice;renderMain()}return}const point=e.target.closest('[data-chart-info]');if(point)",'Filter und Zoombutton klickbar')
+          if "DB='vitalkompass-secure-v1'" not in app or 'function vk207GlucoseChart(' not in app or 'function vk207OpenZoom(' not in app:
+              raise RuntimeError('Sicherheits- und Funktionsanker fehlen.')
+          css=Path('style.css').read_text(encoding='utf-8')
+          css+='\n'+'/* VitalKompass 2.0.7 – mobilfreundliche Essensfilter, grosse Diagramme und Vollbild-Zoom. */\n.vk207-filter{margin:8px 0 14px;padding:12px;border:1px solid #c8dce8;border-radius:13px;background:#f6fbfd}\n.vk207-filter-title{display:block;color:#134b66;font-weight:750;margin-bottom:9px}\n.vk207-filter-buttons{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}\n.vk207-filter-buttons button{border:1px solid #9dbccc;background:#fff;color:#155273;font-weight:700;padding:12px 7px;min-height:48px;border-radius:10px;font-size:.94rem;white-space:normal}\n.vk207-filter-buttons button.active{background:#087d76;color:#fff;border-color:#087d76}\n.vk207-filter small{display:block;margin-top:8px;color:#52697a;font-size:.79rem;line-height:1.35}\n.vk207-glucose-wrap{width:100%;overflow:hidden}\n#main .vk207-glucose-wrap svg.chart{width:100%;max-width:none;height:auto;display:block;background:#f8fcfe;border:1px solid #e1eaf0}\n.vk207-chart-legend{display:flex;flex-wrap:wrap;gap:7px 14px;font-size:.8rem;margin:10px 0;color:#25475c}\n.vk207-chart-legend span{display:inline-flex;align-items:center;gap:5px}\n.vk207-chart-legend i{display:inline-block;width:12px;height:12px;border-radius:50%;flex:none}\n.vk207-chart-legend i.vk207-open-dot{border:2px solid #15836f;background:#fff}\n.vk207-no-values{border:1px solid #bcd2df;background:#f7fafc;border-radius:12px;padding:20px 14px}\n.vk207-chart-toolbar{display:flex;justify-content:flex-end;margin:0 0 7px}\n#main .vk207-chart-toolbar button{min-height:45px;font-weight:700;padding:9px 14px}\n.vk207-modal{position:fixed;inset:0;z-index:9999;background:#0a2136ef;padding:calc(8px + env(safe-area-inset-top)) 8px calc(8px + env(safe-area-inset-bottom));color:#15344b}\n.vk207-dialog{height:100%;max-width:1100px;margin:auto;display:flex;flex-direction:column;background:#fff;border-radius:16px;overflow:hidden}\n.vk207-dialog-header{display:flex;flex-direction:column;gap:9px;flex:none;padding:12px 11px;border-bottom:1px solid #d3e3ed}\n.vk207-dialog-header strong{font-size:1.12rem}\n.vk207-dialog-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}\n.vk207-dialog-actions button{min-height:43px;min-width:42px;background:#edf5f9;border:1px solid #b8d1e0;color:#164d6b;border-radius:10px;font-weight:750;font-size:1.02rem;padding:6px 10px}\n.vk207-dialog-actions [data-vk207-close]{background:#165f86;color:white;border-color:#165f86;margin-left:auto}\n.vk207-dialog-actions button:disabled{opacity:.4}\n.vk207-percent{font-size:.91rem;font-variant-numeric:tabular-nums;min-width:48px;text-align:center;font-weight:700}\n.vk207-zoom-hint{margin:0;padding:6px 10px;color:#46677b;font-size:.8rem;line-height:1.35}\n.vk207-zoom-viewport{position:relative;flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;touch-action:pan-x pan-y;-webkit-overflow-scrolling:touch;background:#f5fbff}\n.vk207-zoom-canvas{width:100%;min-width:100%;height:auto}\n.vk207-zoom-canvas svg.chart{width:100%;max-width:none;display:block;height:auto;background:#f8fcff}\nbody.vk207-zoom-active{overflow:hidden}\n@media(max-width:390px){.vk207-filter-buttons button{font-size:.79rem;padding:8px 4px}.vk207-dialog-header{padding:9px}.vk207-dialog-actions{gap:4px}.vk207-dialog-actions button{font-size:.92rem;padding:6px 8px}}\n@media print{.vk207-chart-toolbar,.vk207-filter,.vk207-modal{display:none!important}}\n'
+          sw=Path('sw.js').read_text(encoding='utf-8')
+          if sw.count('vital-kompass-2.0.6-original-glucose-lines')!=1:
+              raise RuntimeError('Unbekannter Offline-Cache, kein Update.')
+          sw=sw.replace('vital-kompass-2.0.6-original-glucose-lines','vital-kompass-2.0.7-filters-zoom')
+          sw=sw.replace('VitalKompass 2.0.6','VitalKompass 2.0.7')
+          version.update(version='2.0.7',released='2026-10-31',notes='Blutzucker: Alle zusammen, Vor dem Essen oder Nach dem Essen filtern (Nuechtern/Sonstige nur in Alle); grosse Diagrammflaeche mit neun Skalenteilungen; Vollbildzoom mit 100–500 Prozent, Plus/Minus, Fingerbewegung und Pinch. Zoom in allen Diagrammen. Keine neuen Messwerte oder Datenbankeingriffe.')
+          Path('app.js').write_text(app,encoding='utf-8')
+          Path('style.css').write_text(css,encoding='utf-8')
+          Path('sw.js').write_text(sw,encoding='utf-8')
+          Path('version.json').write_text(json.dumps(version,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          print('VitalKompass 2.0.7 patch angewendet: Filter, Zoom und groesseres Diagramm. Gesundheitsdaten und Verschluesselung unveraendert.')
+          PY_VK207
+      - name: Syntax, Wertefilter und Zoom pruefen
+        shell: bash
+        run: |
+          node --check app.js
+          node --check sw.js
+          python3 -m json.tool version.json >/dev/null
+          node - <<'NODE_VK207'
+          'use strict';
+          const fs=require('node:fs'), assert=require('node:assert/strict');
+          const app=fs.readFileSync('app.js','utf8');const begin=app.indexOf('/* VitalKompass 2.0.7 –');const end=app.indexOf('/* Gemeinsamer lokaler Diagramm-Zoom',begin);assert(begin>=0&&end>begin);const src=app.slice(begin,end);
+          const data=[
+           {id:'a',type:'glucose',date:'2026-10-29',time:'07:00',period:'fasting',mgdl:117,verified:true,note:''},
+           {id:'b',type:'glucose',date:'2026-10-29',time:'12:00',period:'before',mgdl:128,verified:true,note:''},
+           {id:'c',type:'glucose',date:'2026-10-29',time:'14:00',period:'after',mgdl:176,verified:true,note:''},
+           {id:'d',type:'glucose',date:'2026-10-30',time:'15:00',period:'other',mgdl:96,verified:false,note:'Test'}
+          ];
+          const stubs={
+           filtered:()=>data,reportPeriod:'month',CHART_PERIODS:[['day','Tag'],['week','Woche'],['month','Monat'],['year','Jahr'],['ten','10 Jahre']],
+           chartPeriods:{glucose:'month'},chartMinDate:()=> '2026-10-01',today:()=> '2026-10-31',
+           sortdate:(a,b)=>(a.date+a.time).localeCompare(b.date+b.time),
+           gLabels:{fasting:'Nüchtern',before:'Vor dem Essen',after:'Nach dem Essen',other:'Sonstige'},
+           colors:{fasting:'#111111',before:'#222222',after:'#333333',other:'#444444'},
+           h:x=>String(x??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'),
+           nf:(x,d=0)=>Number(x).toLocaleString('de-DE',{maximumFractionDigits:d}),
+           fmtDate:s=>s.split('-').reverse().join('.'),
+           thresholdDefs:()=>[[70,'Niedrig','#00f'],[130,'Grenze','#090'],[180,'Hoch','#f90']],
+           chartTraffic:()=>({label:'Orientierungsbereich'}),
+           vk205PointLabels:()=>''
+          };
+          const create=new Function('env',`const {${Object.keys(stubs).join(',')}}=env;${src}; return {plot:vk207GlucoseChart,picker:vk207GlucosePicker,filter:v=>vk207GlucoseFilter=v};`);
+          const a=create(stubs);
+          let html=a.plot();
+          const circles=v=>(v.match(/<circle /g)||[]).length;
+          const lines=v=>(v.match(/<polyline /g)||[]).length;
+          assert.equal(circles(html),4);assert.equal(lines(html),1);
+          assert.match(html,/117 mg\/dl/);assert.match(html,/128 mg\/dl/);assert.match(html,/176 mg\/dl/);assert.match(html,/96 mg\/dl/);
+          assert.equal((html.match(/stroke="#dde9f0"/g)||[]).length,9);
+          assert.match(a.picker(),/Alle zusammen/);assert.match(a.picker(),/Vor dem Essen/);assert.match(a.picker(),/Nach dem Essen/);
+          assert.doesNotMatch(a.picker(),/data-vk207-glucose="fasting"/);
+          a.filter('before');html=a.plot();assert.equal(circles(html),1);assert.equal(lines(html),0);assert.match(html,/128 mg\/dl/);assert.doesNotMatch(html,/117 mg\/dl/);
+          a.filter('after');html=a.plot();assert.equal(circles(html),1);assert.match(html,/176 mg\/dl/);assert.doesNotMatch(html,/128 mg\/dl/);
+          a.filter('all');html=a.plot();assert.equal(circles(html),4);assert.equal(lines(html),1);
+          a.filter('before');html=a.plot('month',700,data);assert.equal(circles(html),4); // Druckbericht unabhängig vom Sichtfilter.
+          html=a.plot('month',700,[]);assert.match(html,/keine gespeicherten Messwerte/);
+          console.log('Tests OK: alle/before/after, Nüchtern nur in Alle, Originalwerte, neun Achsenmarken, zoomfaehiges SVG, leere Auswahl, Einzelpunkt, PDF unveraendert.');
+          NODE_VK207
+          node - <<'NODE_SYSTEM'
+          const fs=require('node:fs'),assert=require('node:assert/strict');
+          const app=fs.readFileSync('app.js','utf8'),css=fs.readFileSync('style.css','utf8'),sw=fs.readFileSync('sw.js','utf8');
+          assert(app.includes("const VERSION='2.0.7'"));
+          assert(app.includes("DB='vitalkompass-secure-v1'"));
+          assert(app.includes('vk207EnhanceCharts()'));
+          assert(app.includes("data-vk207-glucose"));
+          assert(app.includes("data-vk207-open"));
+          assert(app.includes('vk207OpenZoom(openZoom)'));
+          assert(app.includes("if(type==='glucose')return vk207GlucoseChart"));
+          assert(app.includes('vk207GlucoseFilter=choice;renderMain()'));
+          assert(css.includes('.vk207-modal'));
+          assert(css.includes('touch-action:pan-x pan-y'));
+          assert(sw.includes('vital-kompass-2.0.7-filters-zoom'));
+          assert(!app.includes('vk206GlucoseChart('));
+          console.log('Zoom, Filter, Navigation und Offline-Aktualisierung: strukturell geprueft.');
+          NODE_SYSTEM
+      - name: App-Update veroeffentlichen
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.js style.css sw.js version.json
+          if git diff --cached --quiet; then
+            echo "Keine neue Aenderung erforderlich."
+          else
+            git commit -m "VitalKompass 2.0.7: Essensfilter, grossere Kurven, iPhone-Zoom"
+            git push origin HEAD:main
+          fi
