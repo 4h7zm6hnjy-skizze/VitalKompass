@@ -1,7 +1,7 @@
 /* VitalKompass v1.9.7 — lokal, keine externen Bibliotheken, keine Analytics */
 'use strict';
 (() => {
-const VERSION='2.0.12', DB='vitalkompass-secure-v1', STORE='safe', KEY='vault';
+const VERSION='2.0.13', DB='vitalkompass-secure-v1', STORE='safe', KEY='vault';
 const root=document.getElementById('root');
 const $=(q,scope=document)=>scope.querySelector(q);
 const $$=(q,scope=document)=>Array.from(scope.querySelectorAll(q));
@@ -341,6 +341,7 @@ function chartTrafficLegend(){
 }
 
 const CHART_PERIODS=[['day','Tag'],['last7','Letzte 7 Tage'],['week','Woche'],['month','Monat'],['year','Jahr'],['ten','10 Jahre']];
+let vk213GlucoseMode='fit'; // Gesamter Verlauf oder scrollbare Einzelwert-Ansicht. Nur Anzeige, keine Speicherung.
 let chartPeriods={glucose:'month',bp:'month','bp-sys':'month','bp-dia':'month',pulse:'month',weight:'month',asthma:'month',oxygen:'month',lab:'year'};
 /* VK212: Monatsarchiv und sichere Kalendergrenzen. Keine Patientendaten werden verändert. */
 const vk212Months={};
@@ -1116,7 +1117,8 @@ function vk207GlucoseChart(days='month',wide=720,preloaded=null){
  if(!rows.length)return `<div class="vk207-no-values" role="status">Für diese Auswahl sind keine gespeicherten Messwerte vorhanden.</div>${legend}`;
  // Eine hohe Diagrammflaeche und dynamische, sichtbare Skala mit 9 waagerechten Hilfslinien.
  // Bei PDF-Berichten bleiben die breiteren A4-Masse erhalten.
- const W=preloaded!==null?720:period==='ten'?560:Math.max(460,Math.min(16000,rows.length*72+80)),H=preloaded!==null?350:410,L=49,R=14,T=29,B=58;
+ const overview=preloaded===null&&vk213GlucoseMode==='fit';
+ const W=preloaded!==null?720:overview?560:Math.max(460,Math.min(16000,rows.length*72+80)),H=preloaded!==null?350:410,L=49,R=14,T=29,B=58;
  const plotW=W-L-R,plotH=H-T-B,values=rows.map(r=>r.mgdl),vmin=Math.min(...values),vmax=Math.max(...values);
  let lo=Math.max(0,Math.floor((vmin-8)/10)*10),hi=Math.ceil((vmax+8)/10)*10;
  if(hi-lo<40){const mid=(lo+hi)/2;lo=Math.max(0,Math.floor((mid-20)/10)*10);hi=Math.ceil((mid+20)/10)*10}
@@ -1124,7 +1126,7 @@ function vk207GlucoseChart(days='month',wide=720,preloaded=null){
  const y=v=>T+plotH-((v-lo)/(hi-lo))*plotH;
  const times=rows.map(r=>Date.parse(`${r.date}T${/^\d{2}:\d{2}$/.test(r.time||'')?r.time:'12:00'}:00`));
  const useTime=times.every(Number.isFinite)&&times.length>1&&times.at(-1)>times[0];
- const x=i=>L+(rows.length===1?plotW/2:preloaded===null&&period!=='ten'?plotW*i/(rows.length-1):useTime?plotW*(times[i]-times[0])/(times.at(-1)-times[0]):plotW*i/(rows.length-1));
+ const x=i=>L+(rows.length===1?plotW/2:(overview||preloaded!==null||period==='ten')&&useTime?plotW*(times[i]-times[0])/(times.at(-1)-times[0]):plotW*i/(rows.length-1));
  const count=9;
  const grid=Array.from({length:count},(_,i)=>{const v=lo+(hi-lo)*i/(count-1),py=y(v);return `<line x1="${L}" y1="${py}" x2="${W-R}" y2="${py}" stroke="#dde9f0"/><text x="${L-6}" y="${py+4.5}" font-size="13" text-anchor="end" fill="#365366">${nf(v,0)}</text>`}).join('');
  const guides=thresholdDefs('glucose').filter(([v])=>v>=lo&&v<=hi).map(([v,label,col])=>`<line x1="${L}" y1="${y(v)}" x2="${W-R}" y2="${y(v)}" stroke="${col}" stroke-dasharray="6 5" stroke-width="1.6" opacity=".8"><title>${h(label)}: ${nf(v)} mg/dl</title></line>`).join('');
@@ -1134,15 +1136,15 @@ function vk207GlucoseChart(days='month',wide=720,preloaded=null){
   const color=colors[kind];
   const classificationText=chartTraffic('glucose',r,kind).label;
   const label=`${gLabels[kind]} · ${nf(r.mgdl,1)} mg/dl · ${fmtDate(r.date)} ${r.time||''} · ${classificationText} · ${r.verified===true?'bestätigt':'noch unbestätigt'}${r.note?' · '+r.note:''}`;
-  return `<circle cx="${x(i)}" cy="${y(r.mgdl)}" r="8" data-vk210-id="${h(r.id||'')}" fill="${r.verified===true?color:'#fff'}" stroke="${color}" stroke-width="${r.verified===true?'1.5':'2.7'}" class="vk-chart-point" role="button" tabindex="0" data-chart-info="${h(label)}"><title>${h(label)}</title></circle>`;
+  return `<circle cx="${x(i)}" cy="${y(r.mgdl)}" r="${overview?Math.max(2.5,Math.min(5,20/Math.sqrt(rows.length))):8}" data-vk210-id="${h(r.id||'')}" fill="${r.verified===true?color:'#fff'}" stroke="${color}" stroke-width="${r.verified===true?'1.5':'2.7'}" class="vk-chart-point" role="button" tabindex="0" data-chart-info="${h(label)}"><title>${h(label)}</title></circle>`;
  }).join('');
  // 9 Skalenmarken plus bis zu 18 abstandsgesicherte Originalwert-Beschriftungen.
  const labelRows=rows.map((r,i)=>({x:x(i),y:y(r.mgdl),v:r.mgdl}));
- const labels=vk205PointLabels(labelRows,W,H,L,R,T,B,1,preloaded===null&&period!=='ten');
+ const labels=vk205PointLabels(labelRows,W,H,L,R,T,B,1,preloaded===null&&!overview);
  const indices=[0,Math.floor((rows.length-1)/2),rows.length-1].filter((v,i,a)=>a.indexOf(v)===i);
  const ticks=indices.map(i=>`<text x="${x(i)}" y="${H-23}" text-anchor="${i===0?'start':i===rows.length-1?'end':'middle'}" font-size="12.5" fill="#365366">${fmtDate(rows[i].date)}</text>`).join('');
  const unverified=rows.filter(r=>r.verified!==true).length;
- return `<div class="chartwrap vk207-glucose-wrap ${preloaded===null&&period==='ten'?'vk212-ten-overview':''}"><svg class="chart" ${preloaded===null&&period!=='ten'?`style="width:${W}px;min-width:${W}px;max-width:none"`:""} role="img" aria-label="Blutzucker: ${rows.length} echte Einzelmessungen, Auswahl ${h(selection)}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">${grid}${guides}<line x1="${L}" y1="${T}" x2="${L}" y2="${H-B}" stroke="#708da0"/>${points}${dots}${labels}${ticks}<text x="${L}" y="${H-7}" font-size="12" fill="#395b70">mg/dl · ${rows.length} Messung${rows.length===1?'':'en'}</text></svg></div>${legend}<p class="section-note">${rows.length} gespeicherte Einzelmessung${rows.length===1?'':'en'} · ${unverified} noch nicht bestätigt. Nur echte Messwerte, keine Mittelwerte. Tippe auf einen Messpunkt für Datum, Uhrzeit und Details. Zum Vergrößern „Diagramm groß ansehen“ wählen.</p>`;
+ return `<div class="chartwrap vk207-glucose-wrap ${overview?'vk213-overview vk212-ten-overview':'vk213-detail'}"><svg class="chart" ${preloaded===null&&!overview?`style="width:${W}px;min-width:${W}px;max-width:none"`:""} role="img" aria-label="Blutzucker: ${rows.length} echte Einzelmessungen, Auswahl ${h(selection)}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">${grid}${guides}<line x1="${L}" y1="${T}" x2="${L}" y2="${H-B}" stroke="#708da0"/>${points}${dots}${labels}${ticks}<text x="${L}" y="${H-7}" font-size="12" fill="#395b70">mg/dl · ${rows.length} Messung${rows.length===1?'':'en'}</text></svg></div>${legend}<p class="section-note">${rows.length} gespeicherte Einzelmessung${rows.length===1?'':'en'} · ${unverified} noch nicht bestätigt. Nur echte Messwerte, keine Mittelwerte. Tippe auf einen Messpunkt für Datum, Uhrzeit und Details. Zum Vergrößern „Diagramm groß ansehen“ wählen.</p>`;
 }
 
 /* Gemeinsamer lokaler Diagramm-Zoom – fuer Blutzucker, Blutdruck, Gewicht, Puls, SpO2 usw. */
@@ -1202,7 +1204,7 @@ function vk210EnhanceCharts(){
   });
   wrap.after(list);
   if(wrap.classList.contains('vk207-glucose-wrap')&&wrap.scrollWidth>wrap.clientWidth){
-   const note=document.createElement('p');note.className='vk210-scroll-note';note.textContent='Für alle Werte seitlich wischen oder die Messpunktliste öffnen.';wrap.before(note);if(!wrap.classList.contains('vk212-ten-overview'))wrap.scrollLeft=wrap.scrollWidth;
+   const note=document.createElement('p');note.className='vk210-scroll-note';note.textContent='Für alle Werte seitlich wischen oder die Messpunktliste öffnen.';wrap.before(note);if(!wrap.classList.contains('vk213-overview'))wrap.scrollLeft=0;
   }
  });
 }
@@ -1215,6 +1217,12 @@ function vk207EnhanceCharts(){
   const toolbar=document.createElement('div');toolbar.className='vk207-chart-toolbar';
   const button=document.createElement('button');button.type='button';button.className='secondary vk207-open-zoom';button.setAttribute('data-vk207-open','');
   button.textContent='Diagramm groß ansehen / zoomen';
+  if(wrap.classList.contains('vk207-glucose-wrap')){
+   const modes=document.createElement('div');modes.className='vk213-modes';modes.setAttribute('role','group');modes.setAttribute('aria-label','Blutzuckerdiagramm Ansicht');
+   modes.innerHTML='<button type="button" data-vk213-mode="fit">Ganzes Diagramm anzeigen</button><button type="button" data-vk213-mode="detail">Einzelwerte vergrößern</button>';
+   modes.querySelectorAll('[data-vk213-mode]').forEach(b=>{const selected=(b.dataset.vk213Mode===vk213GlucoseMode);b.setAttribute('aria-pressed',String(selected));b.classList.toggle('active',selected)});
+   toolbar.appendChild(modes);
+  }
   toolbar.appendChild(button);wrap.before(toolbar);
  });
 }
@@ -1231,39 +1239,41 @@ function vk207OpenZoom(button){
  const source=wrap?.querySelector('svg.chart');
  if(!source)return;
  vk207CloseZoom();vk207ZoomReturnFocus=button;
- const vb=source.viewBox?.baseVal;
- const attr=source.getAttribute('viewBox')?.trim().split(/\s+/).map(Number)||[];
- const naturalWidth=Math.min(16000,Math.max(320,Number(vb?.width)||attr[2]||source.getBoundingClientRect().width||720));
- const naturalHeight=Math.min(1200,Math.max(150,Number(vb?.height)||attr[3]||350));
+ const attr=(source.getAttribute('viewBox')||'').trim().split(/\s+/).map(Number);
+ const naturalWidth=Math.min(16000,Math.max(200,attr[2]||source.getBoundingClientRect().width||560));
+ const naturalHeight=Math.min(1200,Math.max(150,attr[3]||410));
  const modal=document.createElement('div');modal.id='vk207-zoom';modal.className='vk207-modal';
- modal.setAttribute('role','dialog');modal.setAttribute('aria-modal','true');modal.setAttribute('aria-label','Diagrammvergrößerung');
+ modal.setAttribute('role','dialog');modal.setAttribute('aria-modal','true');modal.setAttribute('aria-label','Diagramm mit Zoom');
  const heading=wrap.closest('.panel')?.querySelector('h2')?.textContent?.trim()||'Diagramm';
- modal.innerHTML=`<div class="vk207-dialog"><div class="vk207-dialog-header"><strong></strong><div class="vk207-dialog-actions"><button type="button" data-vk212-first>◀ Anfang</button><button type="button" data-vk207-minus aria-label="Verkleinern">−</button><span class="vk207-percent" aria-live="polite">100 %</span><button type="button" data-vk207-plus aria-label="Vergrößern">+</button><button type="button" data-vk207-reset>100 %</button><button type="button" data-vk212-last>Ende ▶</button><button type="button" data-vk207-close>Schließen</button></div></div><p class="vk207-zoom-hint">Mit + / − zoomen, mit einem Finger seitlich wischen. „Anfang“ und „Ende“ zeigen die äußeren Messpunkte. Jeder Originalwert ist antippbar.</p><div class="vk207-zoom-viewport" tabindex="0" aria-label="Diagramm nach links und rechts verschiebbar"><div class="vk207-zoom-canvas"></div></div></div>`;
+ modal.innerHTML=`<div class="vk207-dialog"><div class="vk207-dialog-header"><strong></strong><div class="vk207-dialog-actions"><button type="button" data-vk212-first>◀ Anfang</button><button type="button" data-vk207-minus aria-label="Diagramm verkleinern">−</button><span class="vk207-percent" aria-live="polite">Einpassen</span><button type="button" data-vk207-plus aria-label="Diagramm vergrößern">+</button><button type="button" data-vk207-reset>Alles einpassen</button><button type="button" data-vk212-last>Ende ▶</button><button type="button" data-vk207-close>Schließen</button></div></div><p class="vk207-zoom-hint">Start: vollständiges Diagramm. Mit − kleiner, mit + größer, per Finger verschieben. „Alles einpassen“ setzt die Ansicht zurück.</p><div class="vk207-zoom-viewport" tabindex="0" aria-label="Diagramm vergrößern, verkleinern und verschieben"><div class="vk207-zoom-canvas"></div></div></div>`;
  modal.querySelector('.vk207-dialog-header strong').textContent=heading;
  const canvas=modal.querySelector('.vk207-zoom-canvas'),viewport=modal.querySelector('.vk207-zoom-viewport');
  const clone=source.cloneNode(true);
  clone.removeAttribute('style');clone.removeAttribute('width');clone.removeAttribute('height');
- clone.style.display='block';clone.style.maxWidth='none';clone.style.minWidth='0';
- clone.style.width='100%';clone.style.height='auto';
+ clone.setAttribute('preserveAspectRatio','none');
+ clone.style.setProperty('display','block','important');clone.style.setProperty('max-width','none','important');
+ clone.style.setProperty('min-width','0','important');
  canvas.appendChild(clone);
  document.body.appendChild(modal);document.body.classList.add('vk207-zoom-active');
+ // Die Verkleinerung orientiert sich an der tatsaechlich sichtbaren iPhone-Breite,
+ // nicht an der SVG-Originalbreite. Dadurch sind auch Diagramme mit 16000px einpassbar.
+ const baseWidth=Math.max(200,viewport.clientWidth-4);
+ const baseHeight=Math.max(260,Math.min(460,viewport.clientHeight-8,naturalHeight));
  let scale=1;
  function setScale(next){
-  const n=Math.min(6,Math.max(.75,Math.round(next*20)/20));
+  const n=Math.max(.5,Math.min(20,Math.round(next*20)/20));
   const centerX=viewport.scrollLeft+viewport.clientWidth/2;
-  const centerY=viewport.scrollTop+viewport.clientHeight/2;
-  const prev=scale;scale=n;
-  canvas.style.setProperty('width',(naturalWidth*scale)+'px','important');
-  canvas.style.setProperty('min-width',(naturalWidth*scale)+'px','important');
+  const old=scale;scale=n;
+  const width=baseWidth*scale;
+  canvas.style.setProperty('width',width+'px','important');
+  canvas.style.setProperty('min-width',width+'px','important');
   canvas.style.setProperty('height','auto','important');
-  // Chart grows in both axes with its original viewBox aspect ratio.
-  clone.style.setProperty('width','100%','important');
-  clone.style.setProperty('height','auto','important');
-  viewport.scrollLeft=Math.max(0,centerX*(scale/prev)-viewport.clientWidth/2);
-  viewport.scrollTop=Math.max(0,centerY*(scale/prev)-viewport.clientHeight/2);
+  clone.style.setProperty('width',width+'px','important');
+  clone.style.setProperty('height',Math.max(180,baseHeight*Math.min(scale,2))+'px','important');
+  viewport.scrollLeft=Math.max(0,centerX*(scale/old)-viewport.clientWidth/2);
   modal.querySelector('.vk207-percent').textContent=Math.round(scale*100)+' %';
-  modal.querySelector('[data-vk207-minus]').disabled=scale<=.75;
-  modal.querySelector('[data-vk207-plus]').disabled=scale>=6;
+  modal.querySelector('[data-vk207-minus]').disabled=scale<=.5;
+  modal.querySelector('[data-vk207-plus]').disabled=scale>=20;
  }
  setScale(1);
  viewport.scrollLeft=0;
@@ -1271,7 +1281,7 @@ function vk207OpenZoom(button){
   if(e.target.closest('[data-vk207-close]')){vk207CloseZoom();return}
   if(e.target.closest('[data-vk207-plus]')){setScale(scale+.5);return}
   if(e.target.closest('[data-vk207-minus]')){setScale(scale-.5);return}
-  if(e.target.closest('[data-vk207-reset]')){setScale(1);viewport.scrollTo({left:0,top:0});return}
+  if(e.target.closest('[data-vk207-reset]')){setScale(1);viewport.scrollLeft=0;return}
   if(e.target.closest('[data-vk212-first]')){viewport.scrollLeft=0;return}
   if(e.target.closest('[data-vk212-last]')){viewport.scrollLeft=viewport.scrollWidth;return}
   const pt=e.target.closest('[data-chart-info]');if(pt){vk210OpenPoint(pt);return}
@@ -1716,7 +1726,7 @@ if(action==='check-update'){await checkUpdate();return}
 if(action==='install-update'){await saveQueue;let reg=await navigator.serviceWorker?.getRegistration();if(!reg?.waiting){await checkUpdate();reg=await navigator.serviceWorker?.getRegistration();}if(reg?.waiting){vkApprovedUpdateReload=true;reg.waiting.postMessage('SKIP_WAITING');const label=$('#update-status');if(label)label.textContent='Update wird nach abgeschlossenen Speichervorgängen aktiviert.';}else toast('Kein Update wartet auf Installation.');return}
 if(action==='wipe'){if(weightSaveInProgress)throw Error('Die Gewichtsmessung wird noch gespeichert. Bitte warten und die Aktion anschließend wiederholen.');if(!confirm('ALLE GESUNDHEITSDATEN dieses Geräts endgültig löschen? Nur mit einem externen Backup wiederherstellbar.'))return;if(!confirm('Wirklich alle Daten löschen? Diese Aktion kann nicht rückgängig gemacht werden.'))return;await saveQueue;discardTemporaryPDF();bridgePreview=null;await new Promise((resolve,reject)=>{const t=db.transaction(STORE,'readwrite');t.objectStore(STORE).delete(KEY);t.objectStore(STORE).delete(WEIGHT_DRAFT_KEY);t.objectStore(STORE).delete(WEIGHT_JOURNAL_KEY);t.oncomplete=resolve;t.onerror=()=>reject(t.error)});data=null;key=null;authPage(false);return}
 }catch(e){alert(e.message||'Aktion fehlgeschlagen')}}
-root.addEventListener('click',e=>{if(e.target.closest('[data-vk203-open]')){vk203OpenDrawer();return}if(e.target.closest('[data-vk203-close]')||e.target.closest('[data-vk203-close-inside]')){vk203CloseDrawer();return}const openZoom=e.target.closest('[data-vk207-open]');if(openZoom){vk207OpenZoom(openZoom);return}const gf=e.target.closest('[data-vk207-glucose]');if(gf){const choice=gf.dataset.vk207Glucose;if(['all','fasting','before','after'].includes(choice)){vk207GlucoseFilter=choice;renderMain()}return}const listPoint=e.target.closest('[data-vk210-list-point]');if(listPoint){vk210OpenPoint(listPoint);return}const point=e.target.closest('[data-chart-info]');if(point){vk210OpenPoint(point);return}const navButton=e.target.closest('[data-view]');if(navButton){vk203CloseDrawer(false);view=navButton.dataset.view;labQuery='';common();window.scrollTo(0,0);return}const period=e.target.closest('[data-report]');if(period){reportPeriod=period.dataset.report;renderMain();return}const periodAnalysis=e.target.closest('[data-analysis-days]');if(periodAnalysis){analysisDays=periodAnalysis.dataset.analysisDays;renderMain();return}const monthStep=e.target.closest('[data-vk212-month-step]');if(monthStep){if(vk212MonthShift(monthStep.dataset.vk212Type,Number(monthStep.dataset.vk212MonthStep)))renderMain();return}const chartPeriod=e.target.closest('[data-chart-period]');if(chartPeriod){const t=chartPeriod.dataset.chartType,period=chartPeriod.dataset.chartPeriod;if(Object.prototype.hasOwnProperty.call(chartPeriods,t)&&CHART_PERIODS.some(x=>x[0]===period)){chartPeriods[t]=period;renderMain()}return}const chart=e.target.closest('[data-chart-days]');if(chart){chartWindow=chart.dataset.chartDays;renderMain();return}const action=e.target.closest('[data-action]');if(action)doAction(action)});
+root.addEventListener('click',e=>{if(e.target.closest('[data-vk203-open]')){vk203OpenDrawer();return}if(e.target.closest('[data-vk203-close]')||e.target.closest('[data-vk203-close-inside]')){vk203CloseDrawer();return}const vk213=e.target.closest('[data-vk213-mode]');if(vk213){const mode=vk213.dataset.vk213Mode;if(mode==='fit'||mode==='detail'){vk213GlucoseMode=mode;renderMain()}return}const openZoom=e.target.closest('[data-vk207-open]');if(openZoom){vk207OpenZoom(openZoom);return}const gf=e.target.closest('[data-vk207-glucose]');if(gf){const choice=gf.dataset.vk207Glucose;if(['all','fasting','before','after'].includes(choice)){vk207GlucoseFilter=choice;renderMain()}return}const listPoint=e.target.closest('[data-vk210-list-point]');if(listPoint){vk210OpenPoint(listPoint);return}const point=e.target.closest('[data-chart-info]');if(point){vk210OpenPoint(point);return}const navButton=e.target.closest('[data-view]');if(navButton){vk203CloseDrawer(false);view=navButton.dataset.view;labQuery='';common();window.scrollTo(0,0);return}const period=e.target.closest('[data-report]');if(period){reportPeriod=period.dataset.report;renderMain();return}const periodAnalysis=e.target.closest('[data-analysis-days]');if(periodAnalysis){analysisDays=periodAnalysis.dataset.analysisDays;renderMain();return}const monthStep=e.target.closest('[data-vk212-month-step]');if(monthStep){if(vk212MonthShift(monthStep.dataset.vk212Type,Number(monthStep.dataset.vk212MonthStep)))renderMain();return}const chartPeriod=e.target.closest('[data-chart-period]');if(chartPeriod){const t=chartPeriod.dataset.chartType,period=chartPeriod.dataset.chartPeriod;if(Object.prototype.hasOwnProperty.call(chartPeriods,t)&&CHART_PERIODS.some(x=>x[0]===period)){chartPeriods[t]=period;renderMain()}return}const chart=e.target.closest('[data-chart-days]');if(chart){chartWindow=chart.dataset.chartDays;renderMain();return}const action=e.target.closest('[data-action]');if(action)doAction(action)});
 root.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.target?.matches?.('[data-chart-info]')){e.preventDefault();vk210OpenPoint(e.target)}});
 document.addEventListener('keydown',e=>{if(!document.body.classList.contains('vk203-drawer-open'))return;if(e.key==='Escape'){e.preventDefault();vk203CloseDrawer();return}if(e.key!=='Tab')return;const drawer=$('#vk203-drawer');if(!drawer)return;const focusable=$$('button:not([hidden]):not(:disabled), input:not([hidden]):not(:disabled)',drawer).filter(x=>!x.closest('[hidden]'));if(!focusable.length)return;const first=focusable[0],last=focusable.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus()}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus()}});
 root.addEventListener('submit',handleSubmit);

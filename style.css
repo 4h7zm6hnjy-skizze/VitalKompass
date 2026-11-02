@@ -567,3 +567,16 @@ body.vk207-zoom-active{overflow:hidden}
 @media(max-width:410px){.vk212-month-nav{grid-template-columns:minmax(0,1fr) minmax(110px,1.5fr) minmax(0,1fr);gap:5px;padding:8px}.vk212-month-nav button{font-size:.82rem}.vk212-month-nav label{font-size:.72rem}.vk207-dialog-actions{gap:4px}.vk207-dialog-actions button{min-height:38px;min-width:32px;font-size:.81rem;padding:6px}}
 @media print {.vk212-month-nav,.vk207-modal{display:none!important}}
 
+
+/* VitalKompass 2.0.13: Gesamtdiagramm auf iPhone lesbar, Detailansicht gesondert scrollbar. */
+#main .vk207-glucose-wrap.vk213-overview{width:100%!important;overflow:hidden!important;touch-action:pan-y;}
+#main .vk207-glucose-wrap.vk213-overview svg.chart{display:block!important;width:100%!important;min-width:0!important;max-width:100%!important;height:auto!important;min-height:0!important;}
+#main .vk207-glucose-wrap.vk213-detail{width:100%!important;overflow-x:auto!important;overflow-y:hidden!important;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y}
+.vk213-modes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;width:100%;}
+.vk213-modes button{border:1px solid #b5d1dd;background:#f1f7fa;color:#154765;padding:10px 7px;border-radius:10px;font-weight:750;white-space:normal;min-height:46px;font-size:.9rem}
+.vk213-modes button.active{background:#0b8077;color:#fff;border-color:#0b8077}
+#main .vk207-chart-toolbar:has(.vk213-modes){flex-wrap:wrap;gap:8px}
+#main .vk207-chart-toolbar:has(.vk213-modes)>.vk207-open-zoom{width:100%;}
+.vk207-zoom-canvas svg.chart{max-width:none!important;min-width:0!important;display:block!important;}
+@media(max-width:480px){.vk213-modes button{font-size:.82rem;padding:8px 4px}}
+@media print{.vk213-modes{display:none!important}}
