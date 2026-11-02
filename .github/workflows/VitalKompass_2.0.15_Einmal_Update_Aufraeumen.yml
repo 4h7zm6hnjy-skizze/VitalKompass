@@ -1,0 +1,202 @@
+name: VitalKompass 2.0.15 - Alles aufraeumen und Datenschutz pruefen
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/VitalKompass_2.0.15_Einmal_Update_Aufraeumen.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vital-kompass-215-refactor
+  cancel-in-progress: false
+
+jobs:
+  update-vital-kompass:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Code der bisherigen App abrufen
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Sicheres Gesamtupdate vorbereiten
+        shell: bash
+        run: |
+          python3 - <<'PY_VK215'
+          import os,base64,tarfile,io,pathlib,tempfile,subprocess,sys
+          data=''.join([
+              'H4sIABT76GoC/+18W3PkRpaenvkrsjmzDUBEgXUhWeyqLmrZF6l7W93qFVuSwySjOwEkqiCigBpcWGSXKmLCDw57Y982dscz',
+              'MWE/WA6/+2H2RU/Df6Jf4u9k4los9sXrGa9niVBThbyePHnueRLWtrX91y/5xRPBXRF/8id52uq56f/tdq9X/abyTrvb6XzC',
+              'Lj75MzxZkvIY03/yb/Pp9tk09adi1Onf6+3t9na7XWu33e33dzY+uX3+8p/zs25ntzXjqTOxZpd/Ov7f29mp832nv9vJ33t7',
+              '7d2dTzq73X4XpTtdyIJOr9fe+YS1/5z8H0dR+q52EfdfJxMeC/cvav+9OJoybP8k8G3mT2dRnLKXeN3If3+fRKE54QnVm7HY',
+              '+HpEtbpmacbGL9hLPwyFy87CaB62xlHksnMRJ34UJgP2q8xPmS28KBaMh5dsHvupH46Z7+E1SiciZtnM5algGJ4FPHSFa22I',
+              'i5lwUuGOFhsan82s7xNtoPXb/d223e+Ie3t8Z6/Le3a/u9vbcTv37nU6fYGS/j3P5q5mbmhE0DstN3KyqQjTRA2ws+dCpaBr',
+              'T9gdp+P2+W6/4+zv7bX7exi8ze95Tt/hezTAxOYdJ++23+codR10Ex3R29/jTtdti/39vnuv193tuz1XOI6gbkl6GQjLSWS/',
+              'Dt/d2dnp207f63f2d5xux+2Krsc9bu/uufu9Xce+13a6El6FMIsQTUv1urx9z+X7PYji3a4HuPe7Lt/bgWzutnt2r9PdEb1u',
+              'D12XG54fiGR0XCDKXLd4s1qQWQMSv+eqzAfiL6xJOg1ogDo0pxsxn48W3kD/etszrBgmwmv7MhWJbjBsK/OYHzIJA0ChdxMM',
+              'QmXFJlp+KqZoPdhg7ghjHXunQ+6kGQ9GOUlZ6NHRbc0OIptpW0ka64EIddcwLBE6kSt0Y8vWTtralmtYE3Hh+mORpLqxIclI',
+              'DsXujBhGwRxU5o1GzUWA2FxJxVYQcTfB0NZYpHrRSDPQoWu1rc6uRkOwWeyHqP5WVTNVxfyEaDkWfppggRAZQeCLOAUXDGPu',
+              'J4IdXSZY6+MLP9XbgI6p0q+zkJTr4ziOYt3TjnwHZD+hUbhtx5kzGbAsFPGcx6lIwRCPwA6YikAGGhfecsAWapVLiz0TKPvb',
+              'TAQBIYYBEc4k9kGZITEjaECiuCCGUwukKRE4BD0kqm4NfdTagS5Us4pMarXJPK+cr3QDJkc1BKuJGnQE6JIE6CLpUNZppwXm',
+              'd7SNDVd4LBazgDvidRQ6Qk9MbtrmfMJTIh8nAiZHiSX/r3O1//LlzqgzWIvsZ1Eci7M0A11e/RSzBQ1F+JS9lpB5AAmkzw7D',
+              'M2Be77BiH4z3oRqAYtiQJVYOsU6gdozmKmyRzgVoOTE9P05SM+D4A9oBHsplcSxJ8p8u2xhDZpclsj3fInZQlWrRBQ5UGVbP',
+              'wHlFIfUxbsTIczGJXZGl4CH2RSzCtyIEUfs5ahorOx7w0y0F7FZybA9ONyDt++D6AFJaspQTCB4Hl8zGxFSWgONJ8Fvsq8Bl',
+              'rhCzVuCHZyyOMkgMBqK+JIb1z4W1AeLLRpqmOWifsm+fQbC9fv74xTej4w12rB1BIacJmARy9ZiIEa8QTV+IBDNJ5rn6ySYa',
+              'ciZU/vPf/wft9PTUpK7PRZLMAbNgd1nVXg4zDjInSjCk9sjn2BvAtM0eBFn6NnOIALbZE/uw49CAv/mP2ql5rNkzvFALF5x6',
+              'hhFfZgEJzJ9/+z9k/Vz444mCbE6woMWD50+pwe/+STaILi7HIswHSXgGmNPI82gk2ew3/1k2w55NphwFh/IHIDlMp1k4llP9',
+              'T9kki6MgGl+i5GUcASEpxyDfyEJfyKH+k2wXcJsg/JLbUazwoBNKSMuGBrX7u3+U7ZLL6SyNptT2SP1M+VjYEEjU6L/8c4nQ',
+              'R9GZFBWE0AfCo62W2CxFCOGzaBNGsRtKVB45PJSo+qcfa3vj+mdcNpRDTIVLTWrFIRgnxETfgnOvfkzlwn7/OwkwGmOtKHjF',
+              'sf0/OtAdEKXsMewPPplKJP/8mwrsVyKe+iEBfZh5GHrCg3zWWEyJvWKaumr1LApTYDOoBsKckyiZ+ZD0KHoWc0iJcMIzbGNt',
+              'QLVAtJ3F4hzFJNZMDfAnUTymgV9EqQddQQsrVpODeJhJSsU+i1AiNyYaUkDykAeXiZ80qV6VytZgkRR6wj+TIPx3CQK2JI1i',
+              'IqP4bWrnw2EvXj76fGUnQEPQ2hjmMakyCDkJhJx5JqtoZS+Bo6s/hArPpJfkAn77WzmXmAqsL3SIIoslcmlV3JH1Y9cm2N0H',
+              'mOSV8IMJOA4Ff1TUDDEqPF/STo7YMxLGaPslab8cmqJ1IlKyGyWlERgQxWBakz3gzlk2S4gRpBkp6e13v6VVbpwONyBelE5c',
+              'EccoM9cIHnQGdUsRxqAl272vZiJ8BF0mYt1YaCaJLCLW8OqncZzNUAlxGfLz15CII+1+Lv0gFbGS0aYcoTWG7JttHtyf9A5+',
+              'uZjo8tVY3t+W79I0sqZ8puvHvgvtYIvABF/aUXBqjA7e3LezNF0dkaBoUc9Nll7OxGhTNdpkQABvnftiPtrE0O5yk/HY5y0n',
+              'gw6E4kShrByNfPezE20GZj/RBicaNi7BryWATGZ83WQKony4ie+6IhxtpnEmNrEGVYkVUWc1hFypXIxRlm8rKA/eGNb3kR/q',
+              'J9qJJmsV0g40icgQ8Gn3XZFyP0jWIZIVSEuiqZBYI0T5LlZFizOwsAj7IheGNQGebDrl8WUT+VXh7Q5s59g+aLKKtL+IT3L6',
+              'NvPtyem/dXh2BkkvyHhe309jhTlg5QAnE3iIWHx7eBKyJf4pDhTQPZcjzWTv6QHDR4d9PL17VxYftI2iNe34iLCxfmDtCDrN',
+              'E7BIrv7geaFIK7vvi5KNYdo8AUnRnkhfVFzAUIFpE0E3JCGfYU70g2I7J3WAjRB8yBTqYPiMYz6bJDCkggjebRoxuLZ+zGi0',
+              'xNqQ1gvZOqV0oQpp4kCubOTgjkcBSTD4HYWZYpj2rCyEJWKY85Ekii9l2XfS9tDRKnIvVcVDHjgZ9dDnljJNTKJJKxfp8J6o',
+              'zBgWc0YXI102UGbKl9E4+eGH41PDQmvgWr8YHVzcvXthkWwt/n9/lEYuv9SNu3dfZFMoGctPPvdD8IN+YSWzqAu/Daov1ekP',
+              'dTAsnuqtTjWrMnbymdXLx838vgkcHrsjnXjtVWSmfhoI85wHmTBdGPF1tm6yb8V3nd2W3OcVllYjFnwKJpNjV5wH+yEco1hO',
+              'RsWq4H4yhXJEOU1PxfK1YshhaXPDAtMbti88mOmMn0GJX/2+sHfZz7/+B/a9APnCFIFfM4mVgq6sCQbHdJyS++hPYOww7DrU',
+              'bUgGhkBTWPlbOUU8BKbgXm+wN2vUF7AwAU+0sDgRkA7rHjwXZCzVDBJpYUKddQ/uu/75GhRCcPvu5sEbzEHboteM8Mry1szx',
+              'Z6Gnj63p2A3MtrGlsel42w20gYbFUq03TUnzo4nc8QFMDmfCzshHs8ELMBX9MXnP3wEezSgnW7Hft3P73Z599uaXC8xoz6zk',
+              'MjGW28Wb63Nj+SaflppRB2idVVJH0xlqhPGZ6qdeVL8l++M/o0sBMo1KMNOwJdSCkVFOFn4F7E3ORMHLd0ajMAsCmrFk7w7h',
+              '6mxcIIpEwWdv0IupBeHVsqc+mkmgnn31eb0i4WYXFdM//i+A9kV89Yer/yYYnN2YFRDAxLv6kZzEGpilS3O06s5EFwRbpMSA',
+              '2sa/KiBD3ZuXT9dgEs1nvpF3nPmAaC0Wo4sPxOLNrpSquS62VLllQ6ankwADhvgnIVpbIxe23WkXK1ONPnvzpUjfEgnCok5j',
+              'Ph7UgM/HWbcA2frqx7GQS5jDMYnm1rfPXj95cNh5aBH/SR4lOaT4dBt8dlAZTm+2pOQn5fW3me+c6RCDy3dbvmvVkLZSDp8s',
+              'kcVSe5k1qcSiCeB+FEFzwqV5K4ULNOivaPaGllsFbFHKuTfrjWUpbeQ4uakjTZjR5pGDGYPgbQZZ4nlKEjXL1kmgYkAlgH65',
+              'aAQAal6/iD1pD6xz+Bt11/izUVt3h7+BJxsHnNy6BG5wmDdZ43je6LYxYi0h3dHT09xCPTfT05vVV1NVLWnJ6fKa2acpo49o',
+              'aFYgK9+MVhilsCi/o02OBXsaelE85VSDdUDgs0c+h6UznQrm0Tqgad2M+VMoI6AmIDpgn3NnYudq5v72rE6oH06X1winTpww',
+              'RGWJpBPQZYMORG7KURgnN8coWMuKeM+QLDNGZCGlBfMTBl0czSmghZ8hi85FTDi01lu1mw0e+UKRE8Cp6++6WtO+kxEYQCD1',
+              'mRKu02kUbAfQylJOiHBYQ2xGlAP3VvgwgJnrKwmX+GlWbISbxRAen/NYRSK3ZrBMIzjgAGPTZP8KAXxT48uT3DSIBVmp7gl4',
+              'uU7LJzkxn2yW7UE+UejCWzupU/jJpjzRQH+11dvsSx6OIYtSu2JsvddGxR79uddmr7ASo2QHxQJvmtjT1GBwx0qCaUlWnmXh',
+              'WapI6xUsKsECMebOJSuCNGXkEzTnEHFJt2Hup8CTyyaZPWRJBLQIuQQZO3356HNGVlnMUwreUmgU6IbTAcrLRyVhGsBdkSg7',
+              'zAtfcXuk5Q6sNtxobHfRpuZVpNxORhRBzXuYmjQkbZiMZ0r2SB+GIlYgBF94KUXDZZBJRV7yKJMj43RRyMkq+Rs+iSGVSnt7',
+              'Irg7kqS1EtGqx6ig6NhXcaoi8ZhsHJCQEOaqFVtEuEjgFBExCz39sY8qGcZkNvqCulZkz6s8fkknMgVoNo9Hb66bpgWKW4Sf',
+              'TRZHAQRpHmKoa55DAEwcUa1LilV0WgkavFcuN6ZtxgdmMThIuFJsr241xQqkKJezvEuckxtB1CK9QQ2kQQ7zmvGKHTdkwzrZ',
+              'fBWQL/BmTfyljjFxAaGwWUVWHsdzqTBSJQkITbP46ieP/BA93032Mo6MetyFpkWZXg9A0AIErOib4K6RYgU7UZgCvOidV0Ep',
+              'gBzPUjrAkR4Ln6YQaJBc8BXeSnsQZBukkyMF1JN0GsCzhDX1iCcTO1KO0fnZS5Bg5D4kNyz2kyiUE+XSlOh+CxS2RXNuFXPW',
+              'dPhdFXl9c392ICGYCji3TIlcyQckP69+RA9F/A9EAmJwJoQ7sMX86kdYnaFSpO9yWWexT2to2ADKqNg8yHmIvc0kAGFuVdQo',
+              'aZ1ivkHj1SRMjoPrBLQOZ8tNsyAgWDk5UdhXP8GKCEKZRvBMiBmjo6W4OC5KI8bPI99lZH6fUdoAnSgxOlGCHncjBnOFjpmj',
+              'ROqvUMwZBctu0tyU3GFx131MQfovQUgkfHXNkZLQFKODBehOWDBzxyK1nADDUtzluGBfmJMUaDrVDKln3z9cHuwIR+8YtMZY',
+              'GHgICHhoECB1iV2K6BoHnFp+6AQZjDD0IMeCJ5igwTaGcV2c3NR2GFM8LH7OfdostbVLtQDXec8CQGgth6c5/K5jLEovptvZ',
+              'sTDXQwjtcRRforI5/aPIQZ0xVMErGjwPt8uQKMqJkmuW9RDKdSp5MAfxI7asILuWMmXLA6vWM9qyRGl3Oq4I6KA/Fh6sWBBP',
+              'Al0eQDen+DGHcVOem8szTmof5aopgfeWTkC7IMOUS0Wfq3W5Ua61MXbt1+oUe1PGvsQ5GVGOsMCP43SyLKHShUG67VxaWsHV',
+              'T1APAem9F7CuIW2T/JBtDHEhlWicWqwZqr7ZcComhe1UDCfyyGglFDYlrKGUIw1Iq/DcHTjkkfMcS/3hh/Kn5eRbTQKbToCM',
+              'cm1AVav0i/Rw/QJXzxE/ZFl1IkQDzIqlNWYL16xvrZAoN8jMly8PsFolngYszGJaCailQMm1wO7jvKJmhalN1xuoXA13fhw+',
+              'V2KGzeWqc7dWdXCbW+xknXtcHZyCeNTcKW3EW0GmfrBuB2RcItdtDWQovfbLIpkCHpiQXTBffZ+btpvftN4odicmJHvC68Rw',
+              'lBN3Q/+tarwbba2CIoggbqIHeAYTP3ybQReP36sSb46h1HZ8NYzyhWvL0mLXIcQFtKK0YiVMM8qYYUA45E0olC58ETFF5pRi',
+              'NSVFmKlmxXF0JYZMBphLdySFAzGR5aCOKac0LBftgfBt4n76YW3YArtBx2zNaMlui0IViTqrlEZMDHdA5Ha4PPYvghny+FLb',
+              'wLblw/huMYa4IAUVjlsyJ2zzoAhX0V+gc0SZSSq3RYJhDO1aEQY0uSHTXfCzzBiiBiq3RfUZjTrSharKqTVK5Xbhn8xcwfa9',
+              'c4kPStKDzwGjEC6LXNdNYZEXIhOslgRg5zix/ZQc6HfxkHKa2c+//q+1/j//+vfYTxA8B2FYKjaPfavJ9AqwkmVsgYmqfAYw',
+              'tsxCUN5SAiwyZYxPaOspdwducs4/H7FPmrZFWMxTfr4W0+hcsHQesVmMXzRZqR7dgva+ecqUDQEuZnoYsVwBRhRBYAVPJIYl',
+              'fWhY5H76JLMLt3jO4W5MBNx2d8AEiJjV4j3kTztOFueqGC4oIcoV2KZYBh2sj4l1SiOV+HT7U9ax9q2dAZ090r9zyv4iS44R',
+              'TlntHMb4wAkeSZv7a0Fps2uEQXFit7g2YyynjAuHNyG+z7C81uMwnWexp6yTRwXXD1ihF5jUCpId8o0oJA2j4zHsj31ZJElC',
+              'onh+PEVZIT6YzL0lrFobKkOwrhGpxNw81ihS5hfJR09E/BZi8xmoNQl45qksJ0rlpRMB0naUnqmdko38IV2rNJHtKk3kxjG1',
+              'Z2rdcJuUFr4Z6gIPlJ7SMJtQUID3rjYEGM1IUhqbA+9bgJDfZrJB+I6plcpPsjGlqcKtd2Xc/4cfXIsExGX+Bg+dYLipsazW',
+              'nskjgkc8zaYJaGWapblnyA6DlI60oTNuhkSr2+Ej6XObMmXPVAm7Q5Dg5rvbmDXrfaAXRGcoZ+nh4asjlYjhjA6c4/YpjJSy',
+              'iQElLhOAi+5l1XC5pLVV1klpkuRa+aaUgs0mORUEkoWQ1v44FG7dK5rWrSeY/yudFdl93BDac2XXK9XNznngw3+P3wFwnmP0',
+              '+Oujp1+9KDNdq31v1uyipkg6TvKTFWJ8J0m2yMrcgMT6ltS/PBROkiIxmc6DQSh0HqvCCC/4uT+WklHqBSGzwCgyL6UZlM2n',
+              '2xtWLa0G2+66UAaDndkF688uhjCtoGgH+3htLxtND3K3dEFeUksmCQ9cPyHfK4tFS/pg7pCEdRQPZpFPim/oRSHa+m/FwLp3',
+              'D4aJKlDHKYP9dhtuXYDmv+j0d5x+e1hA0+li/k6b4PHDlspdGOzs4R0zAtWXAwkEZeLkELcC4aWDDpbRhPpYuoHvgZ3aDG3K',
+              'aolbdgRDcDroAIAkwjazX7hc9IUo5snrd1cnKqYYeJCwCVyuxIfqXsApDMDJg141ntfmbvdeMV/MXT9LCOHN8Zi1knK0qKMC',
+              'zRu43QVuVf/G0f2ivp2sU07SaMQm3UU1Vsfq7MUlWtVOtMte1cH+otgJehnSnxaAnFFwv4VNzaZhMgBbCJ7qXROgT/mF3jY7',
+              'XmwYwzGfDWh3m8OWI3qBwOrwp+X6sbLEBmrIIRhvHEp0JLJZS55RDlNxkbZk3YDoQE5A1DL33XSCqdp/JQlJvdbIjHaFVriy',
+              'GVSeF9UJwRbunugMbe6c0RaF7uAXnudVJNwTu7t1gu00EC7XeED5IjVsW/vXuKLfbq/2kckkjT3qUS86sfKCaN6ax1gvDy/n',
+              'kGlitTOlnNRn7O9TXyLKEk5rp1jEbnfP63vNId5P0WKf3+vtriESIuIWDNEWSeBFfQty8qqWmp8LLdbTXV7LlJu2WJUKtX1e',
+              'IYVyhEbc/yOIt7eOeHcrSSlpqL1+mnXgEucW9Ld3E5l1XWeFJO9R0zrhdbx9zylpj+/Ye/1VMqpLiP1+XUKsg/K4eSIhcwxP',
+              'F/U5O709e5/nc84n4MLrA8ozgsUaSOuifZXdOjV0dtejU45bivF1WqZY9y56/zVMXZ/rFcFB1cwujMV1KfZRe7+sRuYX+ci9',
+              '3XsfMzLGWa6lyJubF5Oqy0mLdb3NFSYqyDuMQnFH3eXjYbpUkQ26ytO4azMvzJWHhw+fPB5pahFnytRoKdOlujakNAeYumbN',
+              '3NyRYIL8yuCHxLCxYOYc0TE7nJTvopiOah/COCFbZx1Ua62e3mDzhprdQTV8Sw3fQgOCmseYAuLSUpcO9fwWUml+mcCc4ET4',
+              'Wrfd3Wt1Oq12VzPJ/09G2hdiSi41uaMvhHQDYIwP4HXTnSAywM4CGH3wtwV7wrNZmqdBCJPqijs3lVNplmfM2+rYGdCchVc/',
+              'zbzUbJ6ClqeoeC9OccZCnpmiaTPSVwvvpbBMQzSoxRxa8lJGEamwVE6/jWo5TxGno5gPgLn6kdz5VN3y/FpI93z1MidWocxl',
+              'Op6RHoM8lZlGru/5yvlU94rzy4Hy6mCbjmtiPq9dDfQ9dv2C4Z2Rar7uJpN2WFyek1e0ZGiRTThcKbX4HPgB07Y8I59cZkQu',
+              'yiul0n1fd1VUOU+1y5z4U9yVHIAiV+5ryntvbjadJURQpgjJmnzNE8f3R5/TOYZJ2x+mo66xpZ2E2rK2brVoicnXpLP01JR3',
+              'HoHOkZalXmsf2C+uI64hdRZSVKqy901p5r8tqFOZ/3XXoDhRL9KLUnXRLb/ekdDZqGBTH3KIIm8yG6REJlHC7W35v7zH+lfx',
+              '/Y+d69//6N5+/+PP8v2P/eb3P7q9HQuG415/Z/eW3//NfP+DrpQklvN98v/g+x+dbnu3V3z/Y6e/J7//sdPfvf3+x5/j0TJY',
+              'VzDPfSfVhhvKlvcooPyrzI+FroUwAwZeohnm+XSl9HyKUnVMt1KjCrfzYY1i3CR2Rl4izbzPYS4eXYaOXn27AhbPftVWhrWv',
+              'NV77fYtmR/qIwbV+9e9eNJvLw8frHRofxWj2gJtyffz5OlDgIV1vWvsaR9FaoUsHeqr4801BYqNsbwHlPND/5uirF9aMx4nQ',
+              'r6OrbqsW8xlWXmwWg9ZAmF+D4MMdOwINxraeExGLPHZcX+7azSu+VmGwHASF+RIKzzC1536SkI+ROLE/S6VV/39jpvpi69NE',
+              'nkfhLdmsmC3f0Sn5MyPaKPlL3752kfjk+PgkOTk6/fSzk/DkdLhtDPPZZIdqkrAK01N8tyIaenuYXowWy+H51Iqz8Gn4Qswf',
+              'RqF0EeQox+3TLW2YTvzEkl9SqKYfqovK6N8Yb5QXyuYr9CPT5lReidk3tcf53ceE7rNjvd/De6ILj0mNZdxEDmh5AU+f85m8',
+              'r3fcURcVLkcHl4DPKNadz4I+xSSUq3ckUioyLApN0RVy5mYzOCl0Ikl3C+CJqpRqP6xhSmts+5yHFA+Ue198I6J+D6O67yHv',
+              'dZQXOMorTOVloerrCvn3E2qfR8i/UlB+f6B+jaP2gYDajf3yQkd1l75+XV4dPpWX2k+Ngu7dpCJHtbYaTdaQAorMq+vYiAK3',
+              'xgZq9jxrkIAqDzvL+e40JkR3zPao3IQ8xWZlXmq1Xly98+I21IT2MAoCPpPxYyZLk5skn3btai/1PxKcbhZQWaLYkNDynpHW',
+              'JxOf5EmVJ5pBIx+651wmM5QJ/ZTKB8Ir3yeZfaOYfk+y8qYhM+fTCbEU7QXjjiMShYcPnEOrJfbK3ZUIVXEjSogF6PIrXmVI',
+              'ScaZ3jPa9TQpGpSONsv8APn5lsQByt0bl/8vTBDczOeUmTx08VqOy9TXwSjk6ah8p5r0UReqayL4epbHiX5inCxqcnh5El67',
+              '30aNKulcv+gmm9RXTIWQaTUcNm/QEubocxkRNpPlVUx+n+fdo6wGjBWfQMM6KUspnlbrfmdt/1q6OnWucsdq4rRo8t7BwLDY',
+              'JZhsz/3QLwcsR5LpRRChlOGKRrXhYFfVBrKuL+vu3etNVk9NNaNSs9jx0eJafrWxWJpjkT4OBJHng8unbpWJTndjl8vSBiT9',
+              'qZIbBuhUUDQF90yKdZnQWiZ0kKlug5qHccwvzSMsKxyjDkrqaZgG5jd+mO7LOoy8RhnLWCHmMhe045SrNFhneixL2uUzf4T2',
+              'Vj3voqBA1N29SwmNkOL4balvu4FRCsrVGtW13IxGo3KuMkX1eIMtfHegqRShltQ/FDIdUJy73Wp38J9mVitAA8p5sWauB2vC',
+              'pyKYTpIGMMG2LLZ5IvZ2Btrh4eOHh3PMvzTzWaDdW4G8YVHOUcbSqznkF2c+bgYzFyKDRSFFBqUGL6fabbXx344qeVikPA1I',
+              'iSwrEKO0VaZDvRvOLLTFGQ/D9F8OaxPve4BS4r0JqEx9ryClrfhASKlpKLI/AZzdNXAqhNJndnKhnH8lYyS9kUQyku9d6gUR',
+              'VrYjRb9HJX3ri6LFctVglB9nyU3GnVWnR9aS/FIfeGisft1A1JRWYNbXtH7QTjloRaRrh+zUhizobu2QFl2YlUayGjnXfiWT',
+              'GaVeVNbhBw/SpE4jB0deQa6l+9H3Qtg0A/LpdMYWDB6/UgZNMaLnk1fyyCJFWNsic5HwcyEJhifkYFIu2NKkQpXKXC9eGjWB',
+              '31juWg92Dc2YBVVRvlhuk5AVVC1mmqUyhzE/uyothhhKMHYb6nP7xPYE7IWT5NMT/Yd/9/zLJ2k6+xoAwMD9gT4I80BwIG3b',
+              'kl9cIcmu1B/s/QhT5DnY9KFUMttKG6lIe6Wp1mgImGurCqJ0U5e1OEFTK6j7/8VGTOxS8E9si75SRgdEa2U+7NhJFI9IxeUh',
+              'gVxakJh/1ekO2m389++rDrmPNJJKziIrUl8onht020tTf2362Ex9IeUBOW7qiwZymi3/0/29HRnCM6w0enr0lVKgOrw6yB1B',
+              'R+Ztw6Svegw6nbaZSqHU3gcEmkkLGlQu2rmI5ZmhEiwVhejVivW8sVkuqYtxephbBNh+2NO13X5ft73/s2731nZDr/JTDYsp',
+              'XOUsFipTtxiE3MrB8WmDJfJbyZIdaDOiQFhwMXXt5eHR0YD1peOeOzgmy0IfpNrwjU15ld3MLXSWm+4o9qfEF+RglLeTTBBq',
+              '7eaAEgom67W399rbgMTll3gtAh95nIXyiosIEpHMbbD89rl9bp/b5/a5fW6f2+f2uX1un9vn9rl9bp/b5/a5fW6f2+f2uX1u',
+              'n9vn/4PnfwO8O+oTAHgAAA=='
+          ])
+          raw=base64.b64decode(data,validate=True)
+          runner=pathlib.Path(os.environ['RUNNER_TEMP'])
+          with tarfile.open(fileobj=io.BytesIO(raw),mode='r:gz') as tar:
+              for member in tar.getmembers():
+                  if member.name not in {'vk215-patch.py', 'vk215-tests.cjs'} or not member.isfile(): raise RuntimeError('Ungültiger Update-Inhalt')
+                  (runner/member.name).write_bytes(tar.extractfile(member).read())
+          subprocess.run([sys.executable,str(runner/'vk215-patch.py')],check=True)
+          PY_VK215
+      - name: JavaScript und Versionsdateien pruefen
+        shell: bash
+        run: |
+          node --check app.js
+          node --check hba1c.js
+          node --check vk214-documents.js
+          node --check vkpro.js
+          node --check pdf-export.js
+          node --check sw.js
+          python3 - <<'PY_CHECK'
+          from pathlib import Path
+          import json
+          app=Path('app.js').read_text()
+          ver=json.loads(Path('version.json').read_text())
+          assert ver['version']=='2.0.15'
+          assert app.count("const VERSION='2.0.15'")==1
+          assert 'window.VK214.page' in app and 'window.VK_HBA1C.homeCard' in app
+          assert 'vk215AnalysisTab' in app and 'vk215-vital-grid' in app
+          assert 'vk214-documents.js' in Path('index.html').read_text()
+          assert 'vital-kompass-2.0.15-restructured' in Path('sw.js').read_text()
+          print('Versionswechsel, Dokumente, Startseite, Analysen und Cache nachgewiesen.')
+          PY_CHECK
+          git diff --check
+      - name: Benutzeroberflaeche Datenschutz Originale und HbA1c testen
+        shell: bash
+        run: |
+          node "$RUNNER_TEMP/vk215-tests.cjs"
+          python3 - <<'PY_FILES'
+          import subprocess
+          allowed={"app.js","vk214-documents.js","style.css","sw.js","version.json"}
+          changed=set(subprocess.check_output(["git","diff","--name-only"],text=True).splitlines())
+          assert changed==allowed, f"Unerwartete bearbeitete Dateien: {changed!r}"
+          print("Geschuetzt: keine Datenbankdatei, kein Originaldokument, kein Passwort, keine Gesundheitsdaten-Datei veraendert.")
+          PY_FILES
+      - name: Einmaliges Gesamtupdate veroeffentlichen
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.js vk214-documents.js style.css sw.js version.json
+          if git diff --cached --quiet; then
+            echo "Alle Dateien sind bereits auf Version 2.0.15."
+          else
+            git commit -m "VitalKompass 2.0.15: einheitliche Navigation, Dokumente, Berichte und Datenschutz"
+            git push origin HEAD:main
+          fi
