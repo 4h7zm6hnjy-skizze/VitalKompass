@@ -580,3 +580,44 @@ body.vk207-zoom-active{overflow:hidden}
 .vk207-zoom-canvas svg.chart{max-width:none!important;min-width:0!important;display:block!important;}
 @media(max-width:480px){.vk213-modes button{font-size:.82rem;padding:8px 4px}}
 @media print{.vk213-modes{display:none!important}}
+
+/* VitalKompass 2.0.14: compact profile-first homepage & offline document scans. */
+.vk214-start-overview{margin:12px 0 18px}
+.vk214-start-overview h2{margin:10px 0;font-size:1.16rem;color:#143e5d}
+.vk214-start-metrics .metric{min-width:0}
+.vk214-start-metrics .metric strong{overflow-wrap:anywhere}
+.vk214-window-select{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin:10px 0 8px}
+.vk214-window-select button{min-width:0;border:1px solid #b7ccda;background:#f1f7fa;color:#144d68;border-radius:9px;padding:9px 2px;font-weight:750;font-size:.86rem}
+.vk214-window-select button[aria-pressed="true"]{background:#097c78;color:#fff;border-color:#097c78}
+.vk214-page{overflow-wrap:anywhere}
+.vk214-folder-toolbar{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 0 13px}
+.vk214-folder-toolbar label{font-weight:750;color:#254b63}
+.vk214-folder-toolbar input,.vk214-folder-toolbar select{display:block;width:100%;min-height:45px;margin-top:5px;border:1px solid #afc5d2;border-radius:9px;padding:8px;background:white;color:#1b3b50}
+.vk214-doc{border:1px solid #c5d9e3;border-radius:12px;background:#fbfdff;padding:11px;margin:9px 0}
+.vk214-doc-top{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.vk214-doc-top strong{display:block;overflow-wrap:anywhere}
+.vk214-doc-top small{display:block;color:#536d7d;margin-top:4px}
+.vk214-date-ok,.vk214-date-warn{align-self:start;padding:5px 8px;border-radius:8px;font-weight:700;font-size:.82rem;background:#e9f4ed;color:#176141}
+.vk214-date-warn{background:#fff2d9;color:#795400}
+.vk214-doc-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.vk214-doc-actions button,.vk214-dialog-actions button,.vk214-preview-controls button{padding:10px;border-radius:9px;background:#e9f3f8;border:1px solid #bfd3de;color:#15506c;font-weight:700;min-height:43px}
+.vk214-dialog{position:fixed;inset:0;z-index:10010;background:rgba(8,24,37,.76);display:flex;align-items:center;justify-content:center;padding:12px}
+.vk214-dialog-body,.vk214-preview-body{background:#fff;color:#173c56;max-width:650px;width:100%;padding:15px;border-radius:15px;overflow:auto;max-height:94dvh}
+.vk214-dialog-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:12px}
+.vk214-preview-body{max-width:1100px;display:flex;flex-direction:column;height:94dvh;overflow:hidden}
+.vk214-dialog-head{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-shrink:0}
+.vk214-dialog-head strong{overflow-wrap:anywhere}
+.vk214-dialog-head button{padding:10px;border-radius:8px;border:0;background:#146c87;color:#fff;min-height:42px}
+.vk214-preview-controls{display:flex;flex-wrap:wrap;gap:5px;margin:10px 0 4px;flex-shrink:0}
+.vk214-preview-controls button{font-size:.82rem;padding:7px}
+.vk214-preview-help{font-size:.85rem;color:#496474;margin:5px 0;flex-shrink:0}
+.vk214-preview-scroller{overflow:auto;min-height:0;flex:1;background:#dce7eb;text-align:center;border:1px solid #b9ced9;border-radius:10px;padding:6px;-webkit-overflow-scrolling:touch}
+#vk214-source,#vk214-result{display:block;max-width:100%;height:auto;margin:auto;background:#fff;box-shadow:0 1px 8px #5b7383}
+#vk214-source{touch-action:none;cursor:crosshair}
+#vk214-source[hidden],#vk214-result[hidden]{display:none}
+#vk214-other-file iframe{height:72dvh;width:100%;border:0;background:white}
+#vk214-other-file pre{white-space:pre-wrap;text-align:left;padding:12px;background:white}
+.vk214-preview-body>button.primary{flex-shrink:0;margin-top:8px}
+.vk214-error{color:#b52137;font-weight:700}
+@media(max-width:620px){.vk214-folder-toolbar{grid-template-columns:1fr}.vk214-doc-top{flex-direction:column}.vk214-preview-body{padding:8px;height:96dvh}.vk214-dialog{padding:5px}}
+@media print{.vk214-dialog,.vk214-preview-controls{display:none!important}}

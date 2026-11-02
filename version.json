@@ -1,5 +1,5 @@
 {
-  "version": "2.0.13",
+  "version": "2.0.14",
   "released": "2026-11-02",
-  "notes": "Diagramm: gesamte Blutzuckerkurve standardmaessig passend zur Bildschirmbreite; Detailansicht separat; Zoom von 50 bis 2000 Prozent mit Einpassen; archivierte Monate unveraendert; nur Anzeige, keine Messdaten veraendert."
+  "notes": "Dokumentenordner mit bestätigt datierten, fachlich zugeordneten Originalanhängen, konservativem Auto-Zuschnitt und manuellem Vier-Ecken-Zuschnitt für JPG/PNG. Profil zuerst, Kacheln darunter. HbA1c-Äquivalent mit 30/60/90-Tage-Auswahl und expliziter Unsicherheit. Verschlüsselte Daten bleiben erhalten."
 }
