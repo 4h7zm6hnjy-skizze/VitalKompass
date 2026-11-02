@@ -1,5 +1,5 @@
 {
-  "version": "2.0.10",
-  "released": "2026-10-31",
-  "notes": "Blutzuckerdiagramm mit allen gespeicherten Einzelpunkten und lesbaren Zahlen; seitliches Scrollen; anklickbare Detailansicht und vollstaendige Punktliste. Keine Datenbank-Aenderung."
+  "version": "2.0.11",
+  "released": "2026-11-02",
+  "notes": "HbA1c-Langzeitblutzucker: lokale 90-Tage-Auswertung mit Ampel, Tabellen, Tag/7 Tage/Woche/Monat/Jahr/10 Jahre; Laborwerte getrennt. Keine Veraenderung der verschluesselten Datenbank."
 }

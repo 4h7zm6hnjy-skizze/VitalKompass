@@ -510,3 +510,44 @@ body.vk207-zoom-active{overflow:hidden}
 .vk210-point-card dt{font-weight:600;color:#527185}
 .vk210-point-card dd{margin:0;font-weight:750}
 @media print{.vk210-point-list,.vk210-point-dialog,.vk210-scroll-note{display:none!important}#main .vk207-glucose-wrap{overflow:visible!important}#main .vk207-glucose-wrap svg.chart{max-width:100%!important;width:100%!important;min-width:0!important;height:auto!important}}
+
+/* VitalKompass 2.0.11 - HbA1c-Karte und rollierender 90-Tage-Verlauf */
+.vk-hba-card{border-top:4px solid #748392;display:flex;flex-direction:column;gap:8px;justify-content:flex-start;min-height:180px}
+.vk-hba-card.vk-hba-green{border-top-color:#16805d;background:linear-gradient(125deg,#ebf9f3,#fff)}
+.vk-hba-card.vk-hba-yellow{border-top-color:#b57a08;background:linear-gradient(125deg,#fff7e3,#fff)}
+.vk-hba-card.vk-hba-red{border-top-color:#c22842;background:linear-gradient(125deg,#fff0f2,#fff)}
+.vk-hba-card.vk-hba-gray{border-top-color:#718395;background:linear-gradient(125deg,#f1f5f8,#fff)}
+.vk-hba-card>strong{font-size:1.5rem!important;margin:2px 0!important}
+.vk-hba-card small{display:block;font-size:.8rem;line-height:1.4}
+.vk-hba-button{min-height:46px;background:#176d89;color:white;border:0;border-radius:11px;font-weight:800;width:100%;padding:9px 6px;font-size:.9rem;margin-top:auto}
+.vk-hba-status{display:flex;align-items:center;gap:8px;font-size:.85rem;font-weight:750;line-height:1.35;padding:7px 9px;border-radius:9px;background:#f0f4f7;color:#405566;margin:6px 0}
+.vk-hba-status i{width:13px;height:13px;border-radius:50%;background:#748392;flex:none}
+.vk-hba-status.vk-hba-green,.vk-hba-green .vk-hba-status{background:#dff5e9;color:#125840}
+.vk-hba-status.vk-hba-yellow,.vk-hba-yellow .vk-hba-status{background:#fff0cf;color:#825500}
+.vk-hba-status.vk-hba-red,.vk-hba-red .vk-hba-status{background:#fce3e6;color:#912638}
+.vk-hba-status.vk-hba-green i,.vk-hba-green .vk-hba-status i{background:#16805d}
+.vk-hba-status.vk-hba-yellow i,.vk-hba-yellow .vk-hba-status i{background:#b57a08}
+.vk-hba-status.vk-hba-red i,.vk-hba-red .vk-hba-status i{background:#c22842}
+.vk-hba-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-bottom:12px}
+.vk-hba-summary>div{border:1px solid #dce7ee;background:#f6fafc;padding:11px;border-radius:13px;min-width:0}
+.vk-hba-summary small{display:block;color:#536b7a;line-height:1.4;font-size:.83rem}
+.vk-hba-summary strong{display:block;font-size:1.45rem;margin:8px 0 2px;color:#145a7b}
+.vk-hba-summary strong span{font-size:.85rem}
+.vk-hba-picker{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:18px 0}
+.vk-hba-picker button{background:#e9f2f8;color:#1c5673;border:1px solid #c6d8e5;border-radius:10px;padding:9px 6px;min-height:42px;font-size:.88rem;font-weight:740}
+.vk-hba-picker button[aria-pressed="true"]{background:#176d89;border-color:#176d89;color:white}
+#vk-hba-detail h3{margin:18px 0 11px;font-size:1rem;color:#23536d}
+.vk-hba-chart-scroll{width:100%;max-width:100%;overflow-x:auto;border:1px solid #e2ebef;border-radius:12px;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}
+.vk-hba-chart-scroll svg{display:block;max-width:none!important;height:255px!important}
+.vk-hba-note,.vk-hba-lab,.vk-hba-caution{background:#f3f8fc;border-left:4px solid #5893a8;border-radius:9px;padding:11px 12px;margin:12px 0;color:#35546b;font-size:.89rem;line-height:1.55}
+.vk-hba-caution{background:#fff9ec;border-left-color:#b48932;color:#5d4a2f}
+.vk-hba-table{width:100%;max-width:100%;overflow-x:auto}
+.vk-hba-table table{min-width:630px}
+.vk-hba-table-status{font-weight:750;font-size:.85rem}
+.vk-hba-table-status.vk-hba-green{color:#116d4d}
+.vk-hba-table-status.vk-hba-yellow{color:#91620c}
+.vk-hba-table-status.vk-hba-red{color:#a32239}
+.vk-hba-table-status.vk-hba-gray{color:#647482}
+@media(max-width:750px){.vk-hba-summary{grid-template-columns:1fr}.vk-hba-summary strong{font-size:1.25rem}.vk-hba-card{padding:13px!important}.vk-hba-table table{min-width:0!important}}
+@media print{.vk-hba-picker,.vk-hba-button{display:none!important}.vk-hba-chart-scroll{overflow:visible!important}.vk-hba-chart-scroll svg{width:100%;max-width:100%!important}}
+
