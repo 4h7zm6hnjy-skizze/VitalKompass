@@ -1,0 +1,140 @@
+name: VitalKompass 2.0.12 - Monatsarchiv und Diagramm Zoom
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/VitalKompass_2.0.12_Diagramme_Zoom.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vitalkompass-chart-update-212
+  cancel-in-progress: false
+
+jobs:
+  update-diagrams:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Bestehende VitalKompass-Dateien laden
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Sicheres Diagrammupdate durchfuehren
+        shell: bash
+        run: |
+          python3 - <<'PY_VK212'
+          from pathlib import Path
+          import json
+          here=Path('.')
+          appfile=here/'app.js';stylefile=here/'style.css';swfile=here/'sw.js';versionfile=here/'version.json'
+          app=appfile.read_text(encoding='utf-8');css=stylefile.read_text(encoding='utf-8');sw=swfile.read_text(encoding='utf-8');vers=json.loads(versionfile.read_text(encoding='utf-8'))
+          if vers.get('version')=='2.0.12' and "const VERSION='2.0.12'" in app:
+           print('2.0.12 bereits installiert; kein zweiter Patch notwendig.');raise SystemExit(0)
+          if vers.get('version')!='2.0.11' or "const VERSION='2.0.11'" not in app:
+           raise RuntimeError('Erwartet Version 2.0.11. Sicherheitsabbruch ohne Dateiaenderung.')
+          if 'vk212MonthPicker' in app or 'vk212-ten-overview' in css:raise RuntimeError('Teilweise installierte 2.0.12 erkannt: manuell pruefen, nichts ueberschreiben.')
+          def once(src,old,new,label):
+           if src.count(old)!=1:raise RuntimeError(f'{label}: erwartete exakt eine Fundstelle, gefunden {src.count(old)}. Abbruch ohne Speichern.')
+           return src.replace(old,new,1)
+
+          helper='/* VK212: Monatsarchiv und sichere Kalendergrenzen. Keine Patientendaten werden verändert. */\nconst vk212Months={};\nfunction vk212MonthRows(type){\n if(type===\'weight\')return data.weights||[];\n if(type===\'oxygen\')return data.oxygenLogs||[];\n if(type===\'asthma\')return data.asthmaLogs||[];\n if(type===\'lab\')return data.labs||[];\n const category=[\'bp\',\'pulse\',\'bp-sys\',\'bp-dia\'].includes(type)?\'bp\':type;\n return (data.measurements||[]).filter(x=>x?.type===category);\n}\nfunction vk212MonthLimits(type){\n const current=today().slice(0,7);\n const months=vk212MonthRows(type).map(x=>String(x?.date||\'\').slice(0,7))\n  .filter(m=>/^\\d{4}-(0[1-9]|1[0-2])$/.test(m)&&m<=current).sort();\n return {min:months[0]||current,max:current};\n}\nfunction vk212MonthValue(type){\n const limit=vk212MonthLimits(type);\n const selected=vk212Months[type]||limit.max;\n return selected<limit.min?limit.min:selected>limit.max?limit.max:selected;\n}\nfunction vk212MonthShift(type,delta){\n const current=vk212MonthValue(type),parts=current.split(\'-\').map(Number);\n const candidate=new Date(Date.UTC(parts[0],parts[1]-1+delta,1)).toISOString().slice(0,7);\n const bounds=vk212MonthLimits(type);\n if(candidate<bounds.min||candidate>bounds.max)return false;\n vk212Months[type]=candidate;return true;\n}\nfunction vk212MonthSet(type,value){\n if(!/^\\d{4}-(0[1-9]|1[0-2])$/.test(String(value)))return false;\n const bounds=vk212MonthLimits(type);\n if(value<bounds.min||value>bounds.max)return false;\n vk212Months[type]=value;return true;\n}\nfunction vk212MaxDate(period,type){\n if(period===\'month\')return vk212MonthValue(type)+\'-31\';\n return today();\n}\nfunction vk212MonthPicker(type){\n const current=vk212MonthValue(type),b=vk212MonthLimits(type),month=new Date(current+\'-01T12:00:00Z\').toLocaleDateString(\'de-DE\',{year:\'numeric\',month:\'long\',timeZone:\'UTC\'});\n return `<div class="vk212-month-nav" role="group" aria-label="Gespeicherten Monat auswählen"><button type="button" data-vk212-month-step="-1" data-vk212-type="${h(type)}" ${current<=b.min?\'disabled\':\'\'} aria-label="Vorheriger Monat">◀ Zurück</button><label><span>Monat und Jahr</span><input type="month" data-vk212-month-input data-vk212-type="${h(type)}" value="${current}" min="${b.min}" max="${b.max}" aria-label="Monat und Jahr auswählen"></label><button type="button" data-vk212-month-step="1" data-vk212-type="${h(type)}" ${current>=b.max?\'disabled\':\'\'} aria-label="Nächster Monat">Weiter ▶</button><small>Anzeige: ${h(month)} · Frühere Messungen bleiben erhalten.</small></div>`;\n}\n'
+          new_picker='function chartPicker(type){const active=chartPeriods[type]||\'month\';return `<div class="subnav chart-periods" role="group" aria-label="Ansichtszeitraum für ${h(type)}">${CHART_PERIODS.map(([v,label])=>`<button type="button" data-chart-period="${v}" data-chart-type="${type}" aria-pressed="${v===active}" class="${v===active?\'active\':\'\'}">${label}</button>`).join(\'\')}</div>`+(active===\'month\'?vk212MonthPicker(type):\'\')+(type===\'glucose\'?vk207GlucosePicker():\'\')}'
+          new_zoom='function vk207OpenZoom(button){\n const toolbar=button.closest(\'.vk207-chart-toolbar\');\n const wrap=toolbar?.nextElementSibling;\n const source=wrap?.querySelector(\'svg.chart\');\n if(!source)return;\n vk207CloseZoom();vk207ZoomReturnFocus=button;\n const vb=source.viewBox?.baseVal;\n const attr=source.getAttribute(\'viewBox\')?.trim().split(/\\s+/).map(Number)||[];\n const naturalWidth=Math.min(16000,Math.max(320,Number(vb?.width)||attr[2]||source.getBoundingClientRect().width||720));\n const naturalHeight=Math.min(1200,Math.max(150,Number(vb?.height)||attr[3]||350));\n const modal=document.createElement(\'div\');modal.id=\'vk207-zoom\';modal.className=\'vk207-modal\';\n modal.setAttribute(\'role\',\'dialog\');modal.setAttribute(\'aria-modal\',\'true\');modal.setAttribute(\'aria-label\',\'Diagrammvergrößerung\');\n const heading=wrap.closest(\'.panel\')?.querySelector(\'h2\')?.textContent?.trim()||\'Diagramm\';\n modal.innerHTML=`<div class="vk207-dialog"><div class="vk207-dialog-header"><strong></strong><div class="vk207-dialog-actions"><button type="button" data-vk212-first>◀ Anfang</button><button type="button" data-vk207-minus aria-label="Verkleinern">−</button><span class="vk207-percent" aria-live="polite">100 %</span><button type="button" data-vk207-plus aria-label="Vergrößern">+</button><button type="button" data-vk207-reset>100 %</button><button type="button" data-vk212-last>Ende ▶</button><button type="button" data-vk207-close>Schließen</button></div></div><p class="vk207-zoom-hint">Mit + / − zoomen, mit einem Finger seitlich wischen. „Anfang“ und „Ende“ zeigen die äußeren Messpunkte. Jeder Originalwert ist antippbar.</p><div class="vk207-zoom-viewport" tabindex="0" aria-label="Diagramm nach links und rechts verschiebbar"><div class="vk207-zoom-canvas"></div></div></div>`;\n modal.querySelector(\'.vk207-dialog-header strong\').textContent=heading;\n const canvas=modal.querySelector(\'.vk207-zoom-canvas\'),viewport=modal.querySelector(\'.vk207-zoom-viewport\');\n const clone=source.cloneNode(true);\n clone.removeAttribute(\'style\');clone.removeAttribute(\'width\');clone.removeAttribute(\'height\');\n clone.style.display=\'block\';clone.style.maxWidth=\'none\';clone.style.minWidth=\'0\';\n clone.style.width=\'100%\';clone.style.height=\'auto\';\n canvas.appendChild(clone);\n document.body.appendChild(modal);document.body.classList.add(\'vk207-zoom-active\');\n let scale=1;\n function setScale(next){\n  const n=Math.min(6,Math.max(.75,Math.round(next*20)/20));\n  const centerX=viewport.scrollLeft+viewport.clientWidth/2;\n  const centerY=viewport.scrollTop+viewport.clientHeight/2;\n  const prev=scale;scale=n;\n  canvas.style.setProperty(\'width\',(naturalWidth*scale)+\'px\',\'important\');\n  canvas.style.setProperty(\'min-width\',(naturalWidth*scale)+\'px\',\'important\');\n  canvas.style.setProperty(\'height\',\'auto\',\'important\');\n  // Chart grows in both axes with its original viewBox aspect ratio.\n  clone.style.setProperty(\'width\',\'100%\',\'important\');\n  clone.style.setProperty(\'height\',\'auto\',\'important\');\n  viewport.scrollLeft=Math.max(0,centerX*(scale/prev)-viewport.clientWidth/2);\n  viewport.scrollTop=Math.max(0,centerY*(scale/prev)-viewport.clientHeight/2);\n  modal.querySelector(\'.vk207-percent\').textContent=Math.round(scale*100)+\' %\';\n  modal.querySelector(\'[data-vk207-minus]\').disabled=scale<=.75;\n  modal.querySelector(\'[data-vk207-plus]\').disabled=scale>=6;\n }\n setScale(1);\n viewport.scrollLeft=0;\n modal.addEventListener(\'click\',e=>{\n  if(e.target.closest(\'[data-vk207-close]\')){vk207CloseZoom();return}\n  if(e.target.closest(\'[data-vk207-plus]\')){setScale(scale+.5);return}\n  if(e.target.closest(\'[data-vk207-minus]\')){setScale(scale-.5);return}\n  if(e.target.closest(\'[data-vk207-reset]\')){setScale(1);viewport.scrollTo({left:0,top:0});return}\n  if(e.target.closest(\'[data-vk212-first]\')){viewport.scrollLeft=0;return}\n  if(e.target.closest(\'[data-vk212-last]\')){viewport.scrollLeft=viewport.scrollWidth;return}\n  const pt=e.target.closest(\'[data-chart-info]\');if(pt){vk210OpenPoint(pt);return}\n  if(e.target===modal)vk207CloseZoom();\n });\n modal.addEventListener(\'keydown\',e=>{\n  if(e.key===\'Escape\'){e.preventDefault();vk207CloseZoom();return}\n  if(e.key===\'+\'||e.key===\'=\'){e.preventDefault();setScale(scale+.5)}\n  if(e.key===\'-\'){e.preventDefault();setScale(scale-.5)}\n });\n let pinchStart=0,pinchScale=1;\n viewport.addEventListener(\'touchstart\',e=>{\n  if(e.touches.length===2){pinchStart=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);pinchScale=scale}\n },{passive:true});\n viewport.addEventListener(\'touchmove\',e=>{\n  if(e.touches.length===2&&pinchStart>5){e.preventDefault();const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);setScale(pinchScale*d/pinchStart)}\n },{passive:false});\n viewport.addEventListener(\'touchend\',e=>{if(e.touches.length<2)pinchStart=0},{passive:true});\n modal.querySelector(\'[data-vk207-close]\').focus();\n}\n'
+          css_extra='/* VitalKompass 2.0.12: Monatsarchiv, 10-Jahre-Uebersicht, echtes Diagramm-Zoom */\n.vk212-month-nav{display:grid;grid-template-columns:minmax(0,1fr) minmax(145px,1.4fr) minmax(0,1fr);gap:7px;align-items:end;margin:8px 0 17px;padding:12px;border:1px solid #c5dbe7;border-radius:13px;background:#f4f9fc}\n.vk212-month-nav button{min-width:0;padding:10px 5px;min-height:48px;border:1px solid #aec6d6;border-radius:9px;background:#e5f1f9;color:#154d69;font-weight:800}\n.vk212-month-nav button:disabled{opacity:.42;cursor:default}\n.vk212-month-nav label{display:flex;min-width:0;flex-direction:column;gap:4px;color:#2c566d;font-weight:750;font-size:.85rem}\n.vk212-month-nav input{width:100%;min-width:0;min-height:48px;padding:7px 5px;font-size:16px;text-align:center;background:white}\n.vk212-month-nav small{grid-column:1/-1;color:#476273;line-height:1.4}\n#main .vk207-glucose-wrap.vk212-ten-overview{width:100%;overflow:hidden!important;touch-action:pan-y}\n#main .vk207-glucose-wrap.vk212-ten-overview svg.chart{width:100%!important;min-width:0!important;max-width:100%!important;height:auto!important;display:block}\n.vk207-zoom-viewport{overflow:auto!important;-webkit-overflow-scrolling:touch!important;touch-action:pan-x pan-y}\n.vk207-zoom-canvas{width:auto!important;max-width:none!important;min-width:0;height:auto!important;display:block}\n.vk207-zoom-canvas svg.chart{width:100%!important;height:auto!important;max-width:none!important;min-width:0!important;display:block}\n@media(max-width:410px){.vk212-month-nav{grid-template-columns:minmax(0,1fr) minmax(110px,1.5fr) minmax(0,1fr);gap:5px;padding:8px}.vk212-month-nav button{font-size:.82rem}.vk212-month-nav label{font-size:.72rem}.vk207-dialog-actions{gap:4px}.vk207-dialog-actions button{min-height:38px;min-width:32px;font-size:.81rem;padding:6px}}\n@media print {.vk212-month-nav,.vk207-modal{display:none!important}}\n'
+
+          app=once(app,"const VERSION='2.0.11'","const VERSION='2.0.12'",'Version im App-Code')
+          app=once(app,'function chartPicker(type){',helper+'\nfunction chartPicker(type){','Monatsarchiv-Funktionen')
+          old_picker='function chartPicker(type){const active=chartPeriods[type]||\'month\';return `<div class="subnav chart-periods" role="group" aria-label="Ansichtszeitraum für ${h(type)}">${CHART_PERIODS.map(([v,label])=>`<button type="button" data-chart-period="${v}" data-chart-type="${type}" aria-pressed="${v===active}" class="${v===active?\'active\':\'\'}">${label}</button>`).join(\'\')}</div>`+(type===\'glucose\'?vk207GlucosePicker():\'\')}'
+          app=once(app,old_picker,new_picker,'Monatsauswahl in Chartpicker')
+          app=once(app,'function chartMinDate(period){','function chartMinDate(period,type){','Kalendergrenzen-Signatur')
+          app=once(app,"if(period==='month')return fmt(new Date(y,m,1));","if(period==='month')return type?vk212MonthValue(type)+'-01':fmt(new Date(y,m,1));",'Monat ab Datum')
+          # Real charts use the selected month's own upper bound too. Report charts with preloaded records unchanged.
+          app=once(app,"(data.weights||[]).filter(e=>e.date>=chartMinDate(period)&&e.date<=today())","(data.weights||[]).filter(e=>e.date>=chartMinDate(period,'weight')&&e.date<=vk212MaxDate(period,'weight'))",'Gewichtsdiagramm')
+          app=once(app,"(data.asthmaLogs||[]).filter(x=>x.date>=chartMinDate(period)&&x.date<=today())","(data.asthmaLogs||[]).filter(x=>x.date>=chartMinDate(period,'asthma')&&x.date<=vk212MaxDate(period,'asthma'))",'Asthmadiagramm')
+          app=once(app,"oxygen.filter(r=>r.date>=chartMinDate(period)&&r.date<=today())","oxygen.filter(r=>r.date>=chartMinDate(period,'oxygen')&&r.date<=vk212MaxDate(period,'oxygen'))",'Sauerstoffdiagramm')
+          app=once(app,"const minDate=chartMinDate(period),source=preloaded!==null?preloaded:filtered('glucose');","const minDate=chartMinDate(period,'glucose'),maxDate=vk212MaxDate(period,'glucose'),source=preloaded!==null?preloaded:filtered('glucose');",'Blutzuckerfenster')
+          app=once(app,"(preloaded!==null||(r.date>=minDate&&r.date<=today()))","(preloaded!==null||(r.date>=minDate&&r.date<=maxDate))",'Blutzucker-Enddatum')
+          app=once(app,"const W=preloaded!==null?720:Math.max(460,Math.min(16000,rows.length*72+80)),H=preloaded!==null?350:410,L=49,R=14,T=29,B=58;","const W=preloaded!==null?720:period==='ten'?560:Math.max(460,Math.min(16000,rows.length*72+80)),H=preloaded!==null?350:410,L=49,R=14,T=29,B=58;",'10-Jahre-Uebersichtsbreite')
+          app=once(app,"preloaded===null?plotW*i/(rows.length-1):useTime?plotW*(times[i]-times[0])/(times.at(-1)-times[0]):plotW*i/(rows.length-1)","preloaded===null&&period!=='ten'?plotW*i/(rows.length-1):useTime?plotW*(times[i]-times[0])/(times.at(-1)-times[0]):plotW*i/(rows.length-1)",'Zeitgetreue 10-Jahres-Verteilung')
+          app=once(app,'<div class="chartwrap vk207-glucose-wrap"><svg class="chart" ${preloaded===null?`style="width:${W}px;min-width:${W}px;max-width:none"`:""}', '<div class="chartwrap vk207-glucose-wrap ${preloaded===null&&period===\'ten\'?\'vk212-ten-overview\':\'\'}"><svg class="chart" ${preloaded===null&&period!==\'ten\'?`style="width:${W}px;min-width:${W}px;max-width:none"`:""}', 'Breite nur bei anderen Zeitraeumen scrollbar')
+          app=once(app,"const labels=vk205PointLabels(labelRows,W,H,L,R,T,B,1,preloaded===null);","const labels=vk205PointLabels(labelRows,W,H,L,R,T,B,1,preloaded===null&&period!=='ten');",'In 10 Jahren nur lesbare Labels ohne Ueberlagerung')
+          app=once(app,"const minDate=chartMinDate(period);const relevant=preloaded?source:source.filter(x=>x.date>=minDate&&x.date<=today());","const minDate=chartMinDate(period,type),maxDate=vk212MaxDate(period,type);const relevant=preloaded?source:source.filter(x=>x.date>=minDate&&x.date<=maxDate);",'Blutdruck und Puls')
+          app=once(app,"const period=chartPeriods.lab||'year', since=chartMinDate(period);","const period=chartPeriods.lab||'year', since=chartMinDate(period,'lab');",'Labor-Monatsbeginn')
+          app=once(app,"x.name===chosenLabTrend&&x.date>=since&&x.date<=today()&&Number.isFinite(x.value)","x.name===chosenLabTrend&&x.date>=since&&x.date<=vk212MaxDate(period,'lab')&&Number.isFinite(x.value)",'Labor-Monatsende')
+          # Stop the 10-year chart from autoscrolling to the latest entry on first render.
+          app=once(app,"wrap.scrollLeft=wrap.scrollWidth;","if(!wrap.classList.contains('vk212-ten-overview'))wrap.scrollLeft=wrap.scrollWidth;",'10-Jahre-Ausschnitt fix')
+          start=app.index('function vk207OpenZoom(button){');end=app.index('\nfunction lineChart(',start)
+          if end-start<1500 or end-start>10000:raise RuntimeError('Zoom-Funktion unerwartet geaendert; Abbruch.')
+          app=app[:start]+new_zoom+app[end:]
+          # Add controller events before the existing period dispatch.
+          click="const chartPeriod=e.target.closest('[data-chart-period]');"
+          app=once(app,click,"const monthStep=e.target.closest('[data-vk212-month-step]');if(monthStep){if(vk212MonthShift(monthStep.dataset.vk212Type,Number(monthStep.dataset.vk212MonthStep)))renderMain();return}"+click,'Monat zurueck/weiter')
+          change="root.addEventListener('change',e=>{"
+          app=once(app,change,change+"const selectedMonth=e.target.closest('[data-vk212-month-input]');if(selectedMonth){if(vk212MonthSet(selectedMonth.dataset.vk212Type,selectedMonth.value))renderMain();else selectedMonth.value=vk212MonthValue(selectedMonth.dataset.vk212Type);return}",'Monat direkt auswaehlen')
+          # Update PWA files in same atomic commit (no data/DB modifications).
+          sw=once(sw,"const CACHE='vital-kompass-2.0.11-hba1c'","const CACHE='vital-kompass-2.0.12-chart-month-zoom'",'Cache erneuern')
+          sw=sw.replace('VitalKompass 2.0.11:','VitalKompass 2.0.12:',1)
+          vers['version']='2.0.12';vers['released']='2026-11-02';vers['notes']='Monatsarchiv in Diagrammen, 10-Jahre-Gesamtansicht und vergroesserbarer, verschiebbarer Diagramm-Zoom. Keine Aenderung am privaten Datentresor.'
+          # All writes happen only after all guards passed.
+          appfile.write_text(app,encoding='utf-8');stylefile.write_text(css+'\n'+css_extra+'\n',encoding='utf-8');swfile.write_text(sw,encoding='utf-8');versionfile.write_text(json.dumps(vers,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          print('Diagrammupdate 2.0.12 installiert. Verschluesselte Gesundheitsdaten unveraendert.')
+          PY_VK212
+      - name: JavaScript, Anzeige und Archiv pruefen
+        shell: bash
+        run: |
+          node --check app.js
+          node --check hba1c.js
+          node - <<'NODE_VK212'
+          const fs=require('fs'),assert=require('assert');
+          const s=fs.readFileSync('app.js','utf8'),c=fs.readFileSync('style.css','utf8');
+          assert(s.includes("const VERSION='2.0.12'"));
+          assert(s.includes("DB='vitalkompass-secure-v1'"));
+          assert(s.includes('function vk212MonthShift('));
+          assert(s.includes('data-vk212-month-input'));
+          assert(s.includes('const W=preloaded!==null?720:period===\'ten\'?560:'));
+          assert(s.includes('vk212-ten-overview'));
+          assert(s.includes('canvas.style.setProperty(\'width\'') || s.includes('canvas.style.setProperty("width"'));
+          assert(s.includes('viewport.scrollLeft=viewport.scrollWidth'));
+          assert(c.includes('vk212-month-nav'));
+          assert(c.includes('vk212-ten-overview'));
+          assert(JSON.parse(fs.readFileSync('version.json')).version==='2.0.12');
+          assert(fs.readFileSync('sw.js','utf8').includes('vital-kompass-2.0.12-chart-month-zoom'));
+          // Hard boundaries for the selected month and original entry preservation.
+          const a=s.indexOf('const vk212Months={}'),b=s.indexOf('function chartPicker(',a);
+          assert(a>=0&&b>a);
+          const code=s.slice(a,b);
+          const vm=require('vm');
+          const sandbox={Date,Number,String,Array,Object,RegExp,Set,Intl, data:{measurements:[],weights:[],oxygenLogs:[],asthmaLogs:[],labs:[]},today:()=> '2026-11-02',h:x=>String(x)};
+          vm.createContext(sandbox);
+          vm.runInContext(code+`;globalThis.TEST={value:vk212MonthValue,shift:vk212MonthShift,set:vk212MonthSet,start:vk212MonthPicker,end:vk212MaxDate}`,sandbox);
+          const data=sandbox.data;
+          data.measurements.push({type:'glucose',date:'2026-08-15',mgdl:108},{type:'glucose',date:'2026-10-20',mgdl:135});
+          assert.equal(sandbox.TEST.value('glucose'),'2026-11');
+          assert(sandbox.TEST.shift('glucose',-1));
+          assert.equal(sandbox.TEST.value('glucose'),'2026-10');
+          assert.equal(sandbox.TEST.end('month','glucose'),'2026-10-31');
+          assert(sandbox.TEST.shift('glucose',-1));
+          assert.equal(sandbox.TEST.value('glucose'),'2026-09');
+          assert(sandbox.TEST.set('glucose','2026-08'));
+          assert.equal(sandbox.TEST.value('glucose'),'2026-08');
+          assert.equal(sandbox.TEST.shift('glucose',-1),false);
+          assert.equal(sandbox.TEST.set('glucose','2026-12'),false);
+          assert.equal(data.measurements.length,2,'Originalmessungen unberuehrt');
+          console.log('Monatsarchiv, Navigation, Grenzen, 10J-Uebersicht, Zoom und Offline-Version getestet.');
+          NODE_VK212
+      - name: Neues Update auf GitHub speichern
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.js style.css sw.js version.json
+          if git diff --cached --quiet; then
+            echo 'Diagrammupdate bereits installiert.'
+          else
+            git commit -m 'VitalKompass 2.0.12: Monatsarchiv, Zoom und 10-Jahre-Diagramm'
+            git push origin HEAD:main
+          fi
