@@ -1,5 +1,5 @@
 {
-  "version": "2.0.14",
+  "version": "2.0.15",
   "released": "2026-11-02",
-  "notes": "Dokumentenordner mit bestätigt datierten, fachlich zugeordneten Originalanhängen, konservativem Auto-Zuschnitt und manuellem Vier-Ecken-Zuschnitt für JPG/PNG. Profil zuerst, Kacheln darunter. HbA1c-Äquivalent mit 30/60/90-Tage-Auswahl und expliziter Unsicherheit. Verschlüsselte Daten bleiben erhalten."
+  "notes": "Gemeinsame Neuordnung: sieben einklappbare Hauptbereiche, eindeutige Startseite, Diabetes/HbA1c verknüpft, Analysen und Statistiken zusammengeführt, GdB-Dokumente fachlich getrennt, Krankenhaus-Scans zentral. Datenbank und Originale unverändert."
 }

@@ -1,5 +1,5 @@
-/* VitalKompass 2.0.13: measurement editing and encrypted attachments; network-first code updates and offline fallback. */
-const CACHE='vital-kompass-2.0.14-documents-home-hba';
+/* VitalKompass 2.0.15: measurement editing and encrypted attachments; network-first code updates and offline fallback. */
+const CACHE='vital-kompass-2.0.15-restructured';
 const FILES=['./','./index.html','./style.css','./pdf-export.js','./vkpro.js','./app.js','./hba1c.js','./vk214-documents.js','./icon.svg','./icon-192.png','./icon-512.png','./manifest.webmanifest','./version.json'];
 self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(FILES))));
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('vital-kompass-')&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));

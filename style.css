@@ -621,3 +621,29 @@ body.vk207-zoom-active{overflow:hidden}
 .vk214-error{color:#b52137;font-weight:700}
 @media(max-width:620px){.vk214-folder-toolbar{grid-template-columns:1fr}.vk214-doc-top{flex-direction:column}.vk214-preview-body{padding:8px;height:96dvh}.vk214-dialog{padding:5px}}
 @media print{.vk214-dialog,.vk214-preview-controls{display:none!important}}
+
+/* VitalKompass 2.0.15 – einheitliche Navigation und echte Fachseiten. */
+.vk203-group{padding:4px 7px;margin:8px 0}
+.vk203-group>summary{list-style:disclosure-closed;cursor:pointer;font-size:.99rem;font-weight:800;color:#174c70;padding:12px 10px;min-height:46px;display:list-item;margin-left:14px}
+.vk203-group[open]>summary{list-style:disclosure-open;border-bottom:1px solid #dae7ee;margin-bottom:5px}
+.vk203-group>summary:focus-visible{outline:3px solid #f0ad29;border-radius:8px}
+.vk203-group .vk203-menu-item{min-height:48px;font-size:.95rem}
+.vk215-home-panel{margin:8px 0 18px}
+.vk215-home-panel h2{font-size:1.16rem;margin:12px 0}
+.vk215-vital-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.vk215-vital{display:flex;flex-direction:column;align-items:flex-start;text-align:left;gap:6px;width:100%;min-width:0;padding:13px 12px;border-radius:13px;border:1px solid #bed6e1;background:#fff;color:#173e55;min-height:118px}
+.vk215-vital>span{font-size:.89rem;font-weight:700}
+.vk215-vital>strong{font-size:1.3rem;overflow-wrap:anywhere}
+.vk215-vital>small{font-size:.78rem;line-height:1.4;color:#526f7f}
+.vk215-vital:focus-visible{outline:3px solid #e8a935}
+.vk215-vital-grid .vk-hba-card{min-width:0;margin:0}
+.vk215-related{margin:12px 0}
+.vk215-related button{min-height:46px;width:100%;text-align:left}
+.vk215-analysis-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin:13px 0}
+.vk215-analysis-tabs button{min-height:48px;padding:6px;border:1px solid #bed2dc;border-radius:9px;background:#f1f8fc;color:#1a4b67;font-weight:700;font-size:.87rem}
+.vk215-analysis-tabs button[aria-pressed="true"]{background:#136b8a;color:white}
+.vk215-analysis-extra{background:#f1f8fc;padding:12px;border-radius:11px;margin:12px 0}
+.vk215-analysis-extra>summary{cursor:pointer;font-weight:750}
+@media(min-width:800px){.vk215-vital-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:359px){.vk215-vital-grid{grid-template-columns:1fr}.vk215-analysis-tabs{grid-template-columns:1fr}}
+@media print{.vk215-analysis-tabs,.vk215-related{display:none!important}}
