@@ -1,0 +1,392 @@
+name: VitalKompass 2.0.11 - HbA1c 90 Tage
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/VitalKompass_HbA1c_Autostart_211.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vitalkompass-211-hba1c
+  cancel-in-progress: false
+
+jobs:
+  hba1c-90-tage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Aktuelle App laden
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: HbA1c-Karte, Diagramme, Tabelle und Ampel einbauen
+        shell: bash
+        run: |
+          python3 - <<'PY_VK211'
+          from pathlib import Path
+          import base64, json
+          JS64 = (
+              'LyogVml0YWxLb21wYXNzIDIuMC4xMSDigJMgSGJBMWMtVmVybGF1Zi4gTG9rYWwsIG9obmUgU3BlaWNoZXJ1bmcgb2'
+              'RlciBOZXR6d2Vya3p1Z3JpZmYuICovCihmdW5jdGlvbiAoKSB7CiAgJ3VzZSBzdHJpY3QnOwogIGxldCBhY3RpdmVQ'
+              'ZXJpb2QgPSAnbW9udGgnOwogIGxldCBjdXJyZW50RGF0YSA9IG51bGw7CiAgY29uc3QgcGVyaW9kcyA9IFtbJ2RheS'
+              'csJ1RhZyddLFsnN2QnLCc3IFRhZ2UnXSxbJ3dlZWsnLCdXb2NoZSddLFsnbW9udGgnLCdNb25hdCddLFsneWVhcics'
+              'J0phaHInXSxbJzEweScsJzEwIEphaHJlJ11dOwogIGZ1bmN0aW9uIGVzYyh4KSB7cmV0dXJuIFN0cmluZyh4PT1udW'
+              'xsPycnOngpLnJlcGxhY2UoL1smPD4iJ10vZyxjPT4oeycmJzonJmFtcDsnLCc8JzonJmx0OycsJz4nOicmZ3Q7Jywn'
+              'Iic6JyZxdW90OycsIiciOicmIzM5Oyd9W2NdKSk7fQogIGZ1bmN0aW9uIGZtdChuLGRlY2ltYWxzPTApIHtyZXR1cm'
+              '4gTnVtYmVyLmlzRmluaXRlKG4pP24udG9Mb2NhbGVTdHJpbmcoJ2RlLURFJyx7bWluaW11bUZyYWN0aW9uRGlnaXRz'
+              'OmRlY2ltYWxzLG1heGltdW1GcmFjdGlvbkRpZ2l0czpkZWNpbWFsc30pOifigJMnO30KICBmdW5jdGlvbiB2YWxpZE'
+              'RhdGUoZCkge2lmKCEvXlxkezR9LVxkezJ9LVxkezJ9JC8udGVzdChTdHJpbmcoZCkpKXJldHVybiBmYWxzZTtjb25z'
+              'dCBkdD1uZXcgRGF0ZShkKydUMTI6MDA6MDBaJyk7cmV0dXJuICFpc05hTihkdC5nZXRUaW1lKCkpJiZkdC50b0lTT1'
+              'N0cmluZygpLnNsaWNlKDAsMTApPT09ZDt9CiAgZnVuY3Rpb24gYWRkRGF5cyhkLG4pIHtyZXR1cm4gbmV3IERhdGUo'
+              'RGF0ZS5wYXJzZShkKydUMTI6MDA6MDBaJykrbio4NjQwMDAwMCkudG9JU09TdHJpbmcoKS5zbGljZSgwLDEwKTt9Ci'
+              'AgZnVuY3Rpb24gZGF0ZURFKGQpIHtyZXR1cm4gdmFsaWREYXRlKGQpP2Ake2Quc2xpY2UoOCwxMCl9LiR7ZC5zbGlj'
+              'ZSg1LDcpfS4ke2Quc2xpY2UoMCw0KX1gOifigJMnO30KICBmdW5jdGlvbiBsb2NhbFRvZGF5KCkge2NvbnN0IGQ9bm'
+              'V3IERhdGUoKTtyZXR1cm4gW2QuZ2V0RnVsbFllYXIoKSxTdHJpbmcoZC5nZXRNb250aCgpKzEpLnBhZFN0YXJ0KDIs'
+              'JzAnKSxTdHJpbmcoZC5nZXREYXRlKCkpLnBhZFN0YXJ0KDIsJzAnKV0uam9pbignLScpO30KICBmdW5jdGlvbiBtZW'
+              'FuKHJvd3MpIHtyZXR1cm4gcm93cy5sZW5ndGg/cm93cy5yZWR1Y2UoKHN1bSx4KT0+c3VtK3gubWdkbCwwKS9yb3dz'
+              'Lmxlbmd0aDpOYU47fQogIGZ1bmN0aW9uIHJlYWRpbmdzKGRhdGEpIHsKICAgIGNvbnN0IHRvZGF5PWxvY2FsVG9kYX'
+              'koKTsKICAgIHJldHVybiAoQXJyYXkuaXNBcnJheShkYXRhPy5tZWFzdXJlbWVudHMpP2RhdGEubWVhc3VyZW1lbnRz'
+              'OltdKQogICAgICAuZmlsdGVyKHI9PnImJnIudHlwZT09PSdnbHVjb3NlJyYmci52ZXJpZmllZD09PXRydWUmJnZhbG'
+              'lkRGF0ZShyLmRhdGUpJiZyLmRhdGU8PXRvZGF5JiZOdW1iZXIuaXNGaW5pdGUoTnVtYmVyKHIubWdkbCkpJiZOdW1i'
+              'ZXIoci5tZ2RsKT4wJiZOdW1iZXIoci5tZ2RsKTw9OTk5KQogICAgICAubWFwKHI9Pih7ZGF0ZTpyLmRhdGUsdGltZT'
+              'ovXlxkezJ9OlxkezJ9JC8udGVzdChyLnRpbWV8fCcnKT9yLnRpbWU6JzAwOjAwJyxtZ2RsOk51bWJlcihyLm1nZGwp'
+              'LHBlcmlvZDpyLnBlcmlvZHx8J290aGVyJ30pKQogICAgICAuc29ydCgoYSxiKT0+KGEuZGF0ZSsnVCcrYS50aW1lKS'
+              '5sb2NhbGVDb21wYXJlKGIuZGF0ZSsnVCcrYi50aW1lKSk7CiAgfQogIGZ1bmN0aW9uIHJvbGxpbmcoYWxsLGVuZERh'
+              'dGUpIHsKICAgIGlmKCF2YWxpZERhdGUoZW5kRGF0ZSkpcmV0dXJuIHtjb3VudDowLGRheXM6MCxzcGFuOjAsbWVhbj'
+              'pOYU4sZXN0Ok5hTixlbGlnaWJsZTpmYWxzZSxzdGFydDonJyxlbmQ6Jyd9OwogICAgY29uc3Qgc3RhcnQ9YWRkRGF5'
+              'cyhlbmREYXRlLC04OSk7CiAgICBjb25zdCBzZWxlY3RlZD1hbGwuZmlsdGVyKHI9PnIuZGF0ZT49c3RhcnQmJnIuZG'
+              'F0ZTw9ZW5kRGF0ZSk7CiAgICBjb25zdCBkYXlzPW5ldyBTZXQoc2VsZWN0ZWQubWFwKHg9PnguZGF0ZSkpLnNpemU7'
+              'CiAgICBjb25zdCBzcGFuPXNlbGVjdGVkLmxlbmd0aD9NYXRoLnJvdW5kKChEYXRlLnBhcnNlKHNlbGVjdGVkW3NlbG'
+              'VjdGVkLmxlbmd0aC0xXS5kYXRlKydUMTI6MDA6MDBaJyktRGF0ZS5wYXJzZShzZWxlY3RlZFswXS5kYXRlKydUMTI6'
+              'MDA6MDBaJykpLzg2NDAwMDAwKSsxOjA7CiAgICBjb25zdCBhdmc9bWVhbihzZWxlY3RlZCk7CiAgICAvLyBOaWNodC'
+              'BrbGluaXNjaCB2YWxpZGllcnRlLCBiZXd1c3N0IHZvcnNpY2h0aWdlIE1pbmRlc3RkYXRlbnJlZ2VsLgogICAgY29u'
+              'c3QgZWxpZ2libGU9c2VsZWN0ZWQubGVuZ3RoPj0zMCYmZGF5cz49MTQmJnNwYW4+PTQ1OwogICAgcmV0dXJuIHtzdG'
+              'FydCxlbmQ6ZW5kRGF0ZSxjb3VudDpzZWxlY3RlZC5sZW5ndGgsZGF5cyxzcGFuLG1lYW46YXZnLGVzdDplbGlnaWJs'
+              'ZT8oYXZnKzQ2LjcpLzI4Ljc6TmFOLGVsaWdpYmxlfTsKICB9CiAgZnVuY3Rpb24gY2xhc3NpZnkoY2FsYykgewogIC'
+              'AgaWYoIWNhbGMuZWxpZ2libGUpcmV0dXJuIHtsZXZlbDonZ3JheScsbGFiZWw6J0RhdGVubGFnZSB1bnp1cmVpY2hl'
+              'bmQnfTsKICAgIGlmKGNhbGMuZXN0PDUuNylyZXR1cm4ge2xldmVsOidncmVlbicsbGFiZWw6J0dyw7xuZXIgT3JpZW'
+              '50aWVydW5nc2JlcmVpY2gnfTsKICAgIGlmKGNhbGMuZXN0PDYuNSlyZXR1cm4ge2xldmVsOid5ZWxsb3cnLGxhYmVs'
+              'OidHZWxiZXIgT3JpZW50aWVydW5nc2JlcmVpY2gnfTsKICAgIHJldHVybiB7bGV2ZWw6J3JlZCcsbGFiZWw6J1JvdG'
+              'VyIE9yaWVudGllcnVuZ3NiZXJlaWNoJ307CiAgfQogIGZ1bmN0aW9uIGxhdGVzdExhYihkYXRhKSB7CiAgICBjb25z'
+              'dCByb3dzPShBcnJheS5pc0FycmF5KGRhdGE/LmxhYnMpP2RhdGEubGFiczpbXSkuZmlsdGVyKGw9PmwmJmwudmVyaW'
+              'ZpZWQ9PT10cnVlJiZ2YWxpZERhdGUobC5kYXRlKSYmbC5kYXRlPD1sb2NhbFRvZGF5KCkmJihsLm5hbWU9PT0nSGJB'
+              'MWMgKE5HU1ApJ3x8bC5uYW1lPT09J0hiQTFjIChJRkNDKScpJiYhbC5jb21wYXJhdG9yJiZOdW1iZXIuaXNGaW5pdG'
+              'UoTnVtYmVyKFN0cmluZyhsLnZhbHVlKS5yZXBsYWNlKCcsJywnLicpKSkpCiAgICAgIC5tYXAobD0+e2NvbnN0IHJh'
+              'dz1OdW1iZXIoU3RyaW5nKGwudmFsdWUpLnJlcGxhY2UoJywnLCcuJykpO2NvbnN0IHBjdD1sLm5hbWU9PT0nSGJBMW'
+              'MgKElGQ0MpJz9yYXcqMC4wOTE0OCsyLjE1MjpyYXc7cmV0dXJuIHtkYXRlOmwuZGF0ZSxwY3QscmF3LGtpbmQ6bC5u'
+              'YW1lfTt9KQogICAgICAuZmlsdGVyKGw9PmwucGN0Pj0zJiZsLnBjdDw9MjApOwogICAgcm93cy5zb3J0KChhLGIpPT'
+              '5hLmRhdGUubG9jYWxlQ29tcGFyZShiLmRhdGUpfHwoYS5raW5kPT09J0hiQTFjIChOR1NQKSc/LTE6MSkpOwogICAg'
+              'cmV0dXJuIHJvd3MuYXQoLTEpfHxudWxsOwogIH0KICBmdW5jdGlvbiBob21lQ2FyZChkYXRhKSB7CiAgICBjb25zdC'
+              'BhbGw9cmVhZGluZ3MoZGF0YSkscmVjPWFsbC5sZW5ndGg/cm9sbGluZyhhbGwsYWxsLmF0KC0xKS5kYXRlKTpyb2xs'
+              'aW5nKFtdLCcnKSxzdGF0ZT1jbGFzc2lmeShyZWMpLGxhYj1sYXRlc3RMYWIoZGF0YSk7CiAgICByZXR1cm4gYDxkaX'
+              'YgY2xhc3M9Im1ldHJpYyB2ay1oYmEtY2FyZCB2ay1oYmEtJHtzdGF0ZS5sZXZlbH0iPjxzcGFuPkhiQTFjIMK3IDkw'
+              'IFRhZ2U8L3NwYW4+PHN0cm9uZz4ke3JlYy5lbGlnaWJsZT9mbXQocmVjLmVzdCwxKSsnICUnOifigJMnfTwvc3Ryb2'
+              '5nPjxzbWFsbD5HZXNjaMOkdHp0ZXIgV2VydCDCtyAke2FsbC5sZW5ndGg/ZGF0ZURFKHJlYy5zdGFydCkrJyDigJMg'
+              'JytkYXRlREUocmVjLmVuZCk6J2tlaW5lIGJlc3TDpHRpZ3RlbiBNZXNzdW5nZW4nfTwvc21hbGw+PGRpdiBjbGFzcz'
+              '0idmstaGJhLXN0YXR1cyI+PGkgYXJpYS1oaWRkZW49InRydWUiPjwvaT4ke2VzYyhzdGF0ZS5sYWJlbCl9PC9kaXY+'
+              'JHtsYWI/YDxzbWFsbD48Yj5MYWJvcndlcnQ6PC9iPiAke2ZtdChsYWIucGN0LDEpfSAlICgke2RhdGVERShsYWIuZG'
+              'F0ZSl9KTwvc21hbGw+YDonJ308YnV0dG9uIHR5cGU9ImJ1dHRvbiIgY2xhc3M9InZrLWhiYS1idXR0b24iIGRhdGEt'
+              'dmlldz0iaGJhMWMiPkRpYWdyYW1tICZhbXA7IFRhYmVsbGUgw7ZmZm5lbjwvYnV0dG9uPjwvZGl2PmA7CiAgfQogIG'
+              'Z1bmN0aW9uIGdyb3VwcyhhbGwscGVyaW9kLGFuY2hvcikgewogICAgaWYoIWFsbC5sZW5ndGh8fCF2YWxpZERhdGUo'
+              'YW5jaG9yKSlyZXR1cm4gW107CiAgICBsZXQgZmlyc3Q9YW5jaG9yOwogICAgaWYocGVyaW9kPT09JzdkJylmaXJzdD'
+              '1hZGREYXlzKGFuY2hvciwtNik7CiAgICBlbHNlIGlmKHBlcmlvZD09PSd3ZWVrJylmaXJzdD1hZGREYXlzKGFuY2hv'
+              'ciwtKChuZXcgRGF0ZShhbmNob3IrJ1QxMjowMDowMFonKS5nZXRVVENEYXkoKSs2KSU3KSk7CiAgICBlbHNlIGlmKH'
+              'BlcmlvZD09PSdtb250aCcpZmlyc3Q9YW5jaG9yLnNsaWNlKDAsNykrJy0wMSc7CiAgICBlbHNlIGlmKHBlcmlvZD09'
+              'PSd5ZWFyJylmaXJzdD1hbmNob3Iuc2xpY2UoMCw0KSsnLTAxLTAxJzsKICAgIGVsc2UgaWYocGVyaW9kPT09JzEweS'
+              'cpZmlyc3Q9KE51bWJlcihhbmNob3Iuc2xpY2UoMCw0KSktOSkrJy0wMS0wMSc7CiAgICBjb25zdCBzZWxlY3RlZD1h'
+              'bGwuZmlsdGVyKHI9PnIuZGF0ZT49Zmlyc3QmJnIuZGF0ZTw9YW5jaG9yKSxtYXA9bmV3IE1hcCgpOwogICAgZm9yKG'
+              'NvbnN0IHIgb2Ygc2VsZWN0ZWQpIHsKICAgICAgY29uc3Qga2V5PXBlcmlvZD09PSdkYXknP3IudGltZS5zbGljZSgw'
+              'LDIpKyc6MDAnOnBlcmlvZD09PSd5ZWFyJz9yLmRhdGUuc2xpY2UoMCw3KTpwZXJpb2Q9PT0nMTB5Jz9yLmRhdGUuc2'
+              'xpY2UoMCw0KTpyLmRhdGU7CiAgICAgIGNvbnN0IGxhYmVsPXBlcmlvZD09PSdkYXknP2tleTpwZXJpb2Q9PT0neWVh'
+              'cic/ci5kYXRlLnNsaWNlKDUsNykrJy4nK3IuZGF0ZS5zbGljZSgwLDQpOnBlcmlvZD09PScxMHknP2tleTpyLmRhdG'
+              'Uuc2xpY2UoOCwxMCkrJy4nK3IuZGF0ZS5zbGljZSg1LDcpOwogICAgICBpZighbWFwLmhhcyhrZXkpKW1hcC5zZXQo'
+              'a2V5LHtrZXksbGFiZWwscm93czpbXSxlbmREYXRlOnIuZGF0ZX0pOwogICAgICBtYXAuZ2V0KGtleSkucm93cy5wdX'
+              'NoKHIpO21hcC5nZXQoa2V5KS5lbmREYXRlPXIuZGF0ZTsKICAgIH0KICAgIHJldHVybiBbLi4ubWFwLnZhbHVlcygp'
+              'XS5zb3J0KChhLGIpPT5hLmtleS5sb2NhbGVDb21wYXJlKGIua2V5KSkKICAgICAgLm1hcChnPT4oe2tleTpnLmtleS'
+              'xsYWJlbDpnLmxhYmVsLGNvdW50Omcucm93cy5sZW5ndGgsYXZlcmFnZTptZWFuKGcucm93cykscm9sbGluZzpyb2xs'
+              'aW5nKGFsbCxnLmVuZERhdGUpLGVuZERhdGU6Zy5lbmREYXRlfSkpOwogIH0KICBmdW5jdGlvbiBjaGFydChncm91cH'
+              'Msa2luZCkgewogICAgY29uc3Qgcm93cz1ncm91cHMuZmlsdGVyKGc9Pk51bWJlci5pc0Zpbml0ZShraW5kPT09J2hi'
+              'YSc/Zy5yb2xsaW5nLmVzdDpnLmF2ZXJhZ2UpKTsKICAgIGlmKCFyb3dzLmxlbmd0aClyZXR1cm4gJzxwIGNsYXNzPS'
+              'J2ay1oYmEtZW1wdHkiPktlaW5lIGF1c3JlaWNoZW5kZW4gTWVzc2RhdGVuIGluIGRpZXNlbSBaZWl0cmF1bS48L3A+'
+              'JzsKICAgIGNvbnN0IHdpZHRoPU1hdGgubWF4KDU4MCxyb3dzLmxlbmd0aCo1Nys4MiksaGVpZ2h0PTI1NSxsZWZ0PT'
+              'U2LHJpZ2h0PTI0LHRvcD0yNCxib3R0b209NTU7CiAgICBjb25zdCBwbG90Vz13aWR0aC1sZWZ0LXJpZ2h0LHBsb3RI'
+              'PWhlaWdodC10b3AtYm90dG9tOwogICAgY29uc3QgdmFsdWVzPXJvd3MubWFwKGc9PmtpbmQ9PT0naGJhJz9nLnJvbG'
+              'xpbmcuZXN0OmcuYXZlcmFnZSk7CiAgICBjb25zdCBtaW49TWF0aC5taW4oLi4udmFsdWVzKSxtYXg9TWF0aC5tYXgo'
+              'Li4udmFsdWVzKSxwYWQ9TWF0aC5tYXgoa2luZD09PSdoYmEnPzAuMjU6OCwobWF4LW1pbikqMC4xOCk7CiAgICBjb2'
+              '5zdCBsb3c9TWF0aC5tYXgoMCxtaW4tcGFkKSxoaWdoPW1heCtwYWQ7CiAgICBjb25zdCB4PWk9PmxlZnQrKHJvd3Mu'
+              'bGVuZ3RoPT09MT9wbG90Vy8yOmkqcGxvdFcvKHJvd3MubGVuZ3RoLTEpKTsKICAgIGNvbnN0IHk9dj0+dG9wKyhoaW'
+              'doLXYpLyhoaWdoLWxvdykqcGxvdEg7CiAgICBjb25zdCBncmlkPVswLDEsMiwzLDRdLm1hcChpPT57Y29uc3QgeXk9'
+              'dG9wK2kqcGxvdEgvNCx2PWhpZ2gtaSooaGlnaC1sb3cpLzQ7cmV0dXJuIGA8bGluZSB4MT0iJHtsZWZ0fSIgeTE9Ii'
+              'R7eXl9IiB4Mj0iJHt3aWR0aC1yaWdodH0iIHkyPSIke3l5fSIgc3Ryb2tlPSIjZGNlN2VjIi8+PHRleHQgeD0iJHts'
+              'ZWZ0LTl9IiB5PSIke3l5KzR9IiB0ZXh0LWFuY2hvcj0iZW5kIiBmb250LXNpemU9IjEyIiBmaWxsPSIjNTI2NzdiIj'
+              '4ke2ZtdCh2LGtpbmQ9PT0naGJhJz8xOjApfTwvdGV4dD5gfSkuam9pbignJyk7CiAgICBjb25zdCBwYXRoPXJvd3Mu'
+              'bWFwKChyLGkpPT54KGkpKycsJyt5KHZhbHVlc1tpXSkpLmpvaW4oJyAnKTsKICAgIGNvbnN0IGxhYmVsRXZlcnk9TW'
+              'F0aC5tYXgoMSxNYXRoLmNlaWwocm93cy5sZW5ndGgvMTApKTsKICAgIGNvbnN0IG1hcmtzPXJvd3MubWFwKChnLGkp'
+              'PT57CiAgICAgIGNvbnN0IHZhbHVlPXZhbHVlc1tpXSxjb2xvcj1raW5kPT09J2hiYSc/KHtncmVlbjonIzExODM1Zi'
+              'cseWVsbG93OicjYzE4NDBiJyxyZWQ6JyNjMzMyNDInLGdyYXk6JyM3MTgzOTUnfSlbY2xhc3NpZnkoZy5yb2xsaW5n'
+              'KS5sZXZlbF06JyMxNDc5OGInOwogICAgICByZXR1cm4gYDxjaXJjbGUgY3g9IiR7eChpKX0iIGN5PSIke3kodmFsdW'
+              'UpfSIgcj0iNSIgZmlsbD0iJHtjb2xvcn0iIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iMiI+PHRpdGxlPiR7'
+              'ZXNjKGcubGFiZWwrJyDCtyAnK2ZtdCh2YWx1ZSxraW5kPT09J2hiYSc/MTowKSsoa2luZD09PSdoYmEnPycgJSAobn'
+              'VyIGdlc2Now6R0enQpJzonIG1nL2RsJykrJyDCtyAnK2cuY291bnQrJyBNZXNzdW5nZW4nKX08L3RpdGxlPjwvY2ly'
+              'Y2xlPiR7KGklbGFiZWxFdmVyeT09PTB8fGk9PT1yb3dzLmxlbmd0aC0xKT9gPHRleHQgeD0iJHt4KGkpfSIgeT0iJH'
+              'toZWlnaHQtMjB9IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LXNpemU9IjExIiBmaWxsPSIjNDI2Mjc0Ij4ke2Vz'
+              'YyhnLmxhYmVsKX08L3RleHQ+YDonJ31gOwogICAgfSkuam9pbignJyk7CiAgICByZXR1cm4gYDxkaXYgY2xhc3M9In'
+              'ZrLWhiYS1jaGFydC1zY3JvbGwiIHJvbGU9InJlZ2lvbiIgYXJpYS1sYWJlbD0iRGlhZ3JhbW0gaG9yaXpvbnRhbCBz'
+              'Y3JvbGxiYXIiIHRhYmluZGV4PSIwIj48c3ZnIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgdmlld0'
+              'JveD0iMCAwICR7d2lkdGh9ICR7aGVpZ2h0fSIgd2lkdGg9IiR7d2lkdGh9IiBoZWlnaHQ9IiR7aGVpZ2h0fSIgcm9s'
+              'ZT0iaW1nIiBhcmlhLWxhYmVsPSIke2tpbmQ9PT0naGJhJz8nR2VzY2jDpHR6dGVyIDkwLVRhZ2UtSGJBMWMgaW4gUH'
+              'JvemVudCc6J0JsdXR6dWNrZXJkdXJjaHNjaG5pdHQgaW4gbWcvZGwnfSI+PHJlY3Qgd2lkdGg9IiR7d2lkdGh9IiBo'
+              'ZWlnaHQ9IiR7aGVpZ2h0fSIgZmlsbD0iI2Y4ZmJmZCIgcng9IjEyIi8+JHtncmlkfTxwb2x5bGluZSBwb2ludHM9Ii'
+              'R7cGF0aH0iIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzE0Nzk4YiIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWpv'
+              'aW49InJvdW5kIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4ke21hcmtzfTwvc3ZnPjwvZGl2PmA7CiAgfQogIGZ1bm'
+              'N0aW9uIHN1bW1hcnkoZGF0YSxhbGwpIHsKICAgIGlmKCFhbGwubGVuZ3RoKXtjb25zdCBsYWI9bGF0ZXN0TGFiKGRh'
+              'dGEpO3JldHVybiAnPGRpdiBjbGFzcz0idmstaGJhLW5vdGUiPk5vY2gga2VpbmUgYmVzdMOkdGlndGVuIEJsdXR6dW'
+              'NrZXJtZXNzdW5nZW4gdm9yaGFuZGVuLiBVbmdlcHLDvGZ0ZSBJbXBvcnRlIHdlcmRlbiBlcnN0IG5hY2ggQmVzdMOk'
+              'dGlndW5nIGJlcsO8Y2tzaWNodGlndC48L2Rpdj4nKyhsYWI/YDxwIGNsYXNzPSJ2ay1oYmEtbGFiIj5CZXN0w6R0aW'
+              'd0ZXIgPHN0cm9uZz5MYWJvci1IYkExYzwvc3Ryb25nPjogJHtmbXQobGFiLnBjdCwxKX0gJSB2b20gJHtkYXRlREUo'
+              'bGFiLmRhdGUpfS4gRGllc2VyIExhYm9yd2VydCB3aXJkIG5pY2h0IG1pdCB1bnp1cmVpY2hlbmRlbiBFaW56ZWxtZX'
+              'NzdW5nZW4gdmVybWlzY2h0LjwvcD5gOicnKTt9CiAgICBjb25zdCByZWM9cm9sbGluZyhhbGwsYWxsLmF0KC0xKS5k'
+              'YXRlKSxzdGF0ZT1jbGFzc2lmeShyZWMpLGxhYj1sYXRlc3RMYWIoZGF0YSk7CiAgICBjb25zdCB1bmNoZWNrZWQ9KE'
+              'FycmF5LmlzQXJyYXkoZGF0YT8ubWVhc3VyZW1lbnRzKT9kYXRhLm1lYXN1cmVtZW50czpbXSkuZmlsdGVyKHI9PnI/'
+              'LnR5cGU9PT0nZ2x1Y29zZScmJnIudmVyaWZpZWQhPT10cnVlKS5sZW5ndGg7CiAgICBsZXQgaHRtbD1gPGRpdiBjbG'
+              'Fzcz0idmstaGJhLXN1bW1hcnkiPjxkaXY+PHNtYWxsPsOYIEJsdXR6dWNrZXIsIDkwIFRhZ2U8L3NtYWxsPjxzdHJv'
+              'bmc+JHtmbXQocmVjLm1lYW4sMCl9IDxzcGFuPm1nL2RsPC9zcGFuPjwvc3Ryb25nPjwvZGl2PjxkaXY+PHNtYWxsPk'
+              'hiQTFjLCBudXIgZ2VzY2jDpHR6dDwvc21hbGw+PHN0cm9uZz4ke3JlYy5lbGlnaWJsZT9mbXQocmVjLmVzdCwxKSsn'
+              'ICUnOifigJMnfTwvc3Ryb25nPjwvZGl2PjxkaXY+PHNtYWxsPk1lc3N1bmdlbiAvIE1lc3N0YWdlPC9zbWFsbD48c3'
+              'Ryb25nPiR7cmVjLmNvdW50fSAvICR7cmVjLmRheXN9PC9zdHJvbmc+PC9kaXY+PC9kaXY+PGRpdiBjbGFzcz0idmst'
+              'aGJhLXN0YXR1cyB2ay1oYmEtJHtzdGF0ZS5sZXZlbH0iPjxpIGFyaWEtaGlkZGVuPSJ0cnVlIj48L2k+JHtlc2Moc3'
+              'RhdGUubGFiZWwpfTwvZGl2PjxwIGNsYXNzPSJzZWN0aW9uLW5vdGUiPkF1c3dlcnR1bmcgJHtkYXRlREUocmVjLnN0'
+              'YXJ0KX0gYmlzICR7ZGF0ZURFKHJlYy5lbmQpfSDigJMgOTAgS2FsZW5kZXJ0YWdlLCByw7xja3fDpHJ0cyB2b24gZG'
+              'VyIG5ldWVzdGVuIGJlc3TDpHRpZ3RlbiBNZXNzdW5nLiBOZXVlIE1lc3N1bmdlbiBvZGVyIExhYm9yd2VydGUgd2Vy'
+              'ZGVuIGJlaW0gU3BlaWNoZXJuIGF1dG9tYXRpc2NoIG5ldSBlaW5nZWxlc2VuLjwvcD5gOwogICAgaWYoIXJlYy5lbG'
+              'lnaWJsZSlodG1sKz0nPHAgY2xhc3M9InZrLWhiYS1ub3RlIj5Gw7xyIGVpbmUgU2Now6R0enVuZyB2ZXJsYW5ndCBk'
+              'aWUgQXBwIHZvcnNpY2h0c2hhbGJlciBtaW5kZXN0ZW5zIDMwIGJlc3TDpHRpZ3RlIE1lc3N1bmdlbiwgMTQgdW50ZX'
+              'JzY2hpZWRsaWNoZSBUYWdlIHVuZCBlaW5lIG1pbmRlc3RlbnMgNDUgVGFnZSB1bWZhc3NlbmRlIE1lc3NzcGFubmUu'
+              'IERpZXNlIE1pbmRlc3RtZW5nZSBpc3QgZWluZSB0ZWNobmlzY2hlIFZvcnNpY2h0c3JlZ2VsLCBrZWluIGtsaW5pc2'
+              'NoIHZhbGlkaWVydGVyIEdyZW56d2VydC48L3A+JzsKICAgIGlmKHVuY2hlY2tlZClodG1sKz1gPHAgY2xhc3M9InZr'
+              'LWhiYS1ub3RlIj4ke3VuY2hlY2tlZH0gdW5nZXByw7xmdGUgQmx1dHp1Y2tlcndlcnRlIGF1c2dlc2NobG9zc2VuIO'
+              'KAkyBiaXR0ZSBtaXQgZGVyIE9yaWdpbmFsbWVzc3VuZyBhYmdsZWljaGVuIHVuZCBiZXN0w6R0aWdlbi48L3A+YDsK'
+              'ICAgIGh0bWwrPWxhYj9gPHAgY2xhc3M9InZrLWhiYS1sYWIiPkJlc3TDpHRpZ3RlciA8c3Ryb25nPkxhYm9yLUhiQT'
+              'FjPC9zdHJvbmc+OiAke2ZtdChsYWIucGN0LDEpfSAlIHZvbSAke2RhdGVERShsYWIuZGF0ZSl9JHtsYWIua2luZD09'
+              'PSdIYkExYyAoSUZDQyknPycgKGF1cyBtbW9sL21vbCB1bWdlcmVjaG5ldCknOicnfS48L3A+YDonPHAgY2xhc3M9In'
+              'ZrLWhiYS1sYWIiPktlaW4gYmVzdMOkdGlndGVyIExhYm9yLUhiQTFjIGhpbnRlcmxlZ3QuIERpZSBCZXJlY2hudW5n'
+              'IGF1cyBlaW56ZWxuZW4gQmx1dHp1Y2tlcndlcnRlbiBlcnNldHp0IGtlaW5lIEhiQTFjLUxhYm9yYmVzdGltbXVuZy'
+              '48L3A+JzsKICAgIHJldHVybiBodG1sOwogIH0KICBmdW5jdGlvbiBkZXRhaWwoZGF0YSkgewogICAgY29uc3QgYWxs'
+              'PXJlYWRpbmdzKGRhdGEpLGFuY2hvcj1hbGwubGVuZ3RoP2FsbC5hdCgtMSkuZGF0ZTonJyxpdGVtcz1ncm91cHMoYW'
+              'xsLGFjdGl2ZVBlcmlvZCxhbmNob3IpOwogICAgY29uc3QgYnV0dG9ucz1wZXJpb2RzLm1hcCgoW2tleSxsYWJlbF0p'
+              'PT5gPGJ1dHRvbiB0eXBlPSJidXR0b24iIGRhdGEtaGItcGVyaW9kPSIke2tleX0iIGFyaWEtcHJlc3NlZD0iJHthY3'
+              'RpdmVQZXJpb2Q9PT1rZXk/J3RydWUnOidmYWxzZSd9Ij4ke2xhYmVsfTwvYnV0dG9uPmApLmpvaW4oJycpOwogICAg'
+              'Y29uc3Qgcm93cz1pdGVtcy5tYXAoZz0+e2NvbnN0IHN0PWNsYXNzaWZ5KGcucm9sbGluZyk7cmV0dXJuIGA8dHI+PH'
+              'RkPiR7ZXNjKGcubGFiZWwpfTwvdGQ+PHRkPiR7Zm10KGcuYXZlcmFnZSwwKX0gbWcvZGw8L3RkPjx0ZD4ke2cuY291'
+              'bnR9PC90ZD48dGQ+JHtnLnJvbGxpbmcuZWxpZ2libGU/Zm10KGcucm9sbGluZy5lc3QsMSkrJyAlJzon4oCTJ308L3'
+              'RkPjx0ZD48c3BhbiBjbGFzcz0idmstaGJhLXRhYmxlLXN0YXR1cyB2ay1oYmEtJHtzdC5sZXZlbH0iPiR7ZXNjKHN0'
+              'LmxhYmVsKX08L3NwYW4+PC90ZD48L3RyPmB9KS5qb2luKCcnKTsKICAgIHJldHVybiBzdW1tYXJ5KGRhdGEsYWxsKS'
+              'tgPGRpdiBjbGFzcz0idmstaGJhLXBpY2tlciIgYXJpYS1sYWJlbD0iRGlhZ3JhbW16ZWl0cmF1bSI+JHtidXR0b25z'
+              'fTwvZGl2PjxoMz5CbHV0enVja2VyLUR1cmNoc2Nobml0dDwvaDM+JHtjaGFydChpdGVtcywnZ2x1Y29zZScpfTxoMz'
+              '5IYkExYy1TY2jDpHR6dW5nOiByb2xsaWVyZW5kZSA5MCBUYWdlPC9oMz4ke2NoYXJ0KGl0ZW1zLCdoYmEnKX08aDM+'
+              'TGFuZ3plaXRibHV0enVja2VyLVRhYmVsbGU8L2gzPjxkaXYgY2xhc3M9InRhYmxlLXdyYXAgdmstaGJhLXRhYmxlIj'
+              '48dGFibGU+PHRoZWFkPjx0cj48dGg+WmVpdHJhdW08L3RoPjx0aD7DmCBCbHV0enVja2VyPC90aD48dGg+TWVzc3Vu'
+              'Z2VuPC90aD48dGg+SGJBMWMtU2Now6R0enVuZyAoOTAgVC4pPC90aD48dGg+QW1wZWw8L3RoPjwvdHI+PC90aGVhZD'
+              '48dGJvZHk+JHtyb3dzfHwnPHRyPjx0ZCBjb2xzcGFuPSI1Ij5LZWluZSBiZXN0w6R0aWd0ZW4gTWVzc3dlcnRlIGbD'
+              'vHIgZGVuIGF1c2dld8OkaGx0ZW4gWmVpdHJhdW0uPC90ZD48L3RyPid9PC90Ym9keT48L3RhYmxlPjwvZGl2PjxwIG'
+              'NsYXNzPSJzZWN0aW9uLW5vdGUiPkplZGVyIEhiQTFjLURhdGVucHVua3QgdmVyd2VuZGV0IGF1c3NjaGxpZcOfbGlj'
+              'aCBkaWUgOTAgS2FsZW5kZXJ0YWdlIHZvciB1bmQgZWluc2NobGllw59saWNoIGRlcyBsZXR6dGVuIE1lc3NkYXR1bX'
+              'MgZGVzIGpld2VpbGlnZW4gUHVua3Rlcy4gRGllIEVpbnN0ZWxsdW5nIFRhZy83IFRhZ2UvV29jaGUvTW9uYXQgemVp'
+              'Z3QgZmVpbmVyZSBaZWl0csOkdW1lLCBKYWhyIGZhc3N0IG5hY2ggTW9uYXRlbiB1bmQgMTAgSmFocmUgbmFjaCBKYW'
+              'hyZW4genVzYW1tZW4uIEtlaW5lIGF1ZmdlZsO8bGx0ZW4gb2RlciBlcmZ1bmRlbmVuIE1lc3N1bmdlbi48L3A+PHAg'
+              'Y2xhc3M9InZrLWhiYS1jYXV0aW9uIj48Yj5NZWRpemluaXNjaGVyIEhpbndlaXM6PC9iPiBEaWUgZ3JvYmUgVW1yZW'
+              'NobnVuZyAow5ggbWcvZGwgKyA0Niw3KSAvIDI4LDcgZm9sZ3QgZGVyIEFEQUctR2xlaWNodW5nLiBFaW56ZWxuZSBG'
+              'aW5nZXJwaWtzbWVzc3VuZ2VuIHNpbmQgb2Z0IHplaXRsaWNoIHVuZCBuYWNoIE1haGx6ZWl0ZW4gdmVyemVycnQ7IG'
+              'RlciBSZWNoZW53ZXJ0IGlzdCA8Yj5rZWluIHZlcmzDpHNzbGljaGVyIExhYm9yLUhiQTFjIHVuZCBrZWluZSBEaWFn'
+              'bm9zZTwvYj4uIEFtcGVsYmVyZWljaGU6IHVudGVyIDUsNyAlIGdyw7xuLCA1LDcgYmlzIHVudGVyIDYsNSAlIGdlbG'
+              'IsIGFiIDYsNSAlIHJvdCDigJMgbnVyIGFsbGdlbWVpbiwgbmljaHQgZsO8ciBpbmRpdmlkdWVsbGUgRGlhYmV0ZXMt'
+              'VGhlcmFwaWV6aWVsZS4gQmVpIHVuenVyZWljaGVuZGVuIERhdGVuIGJsZWlidCBkaWUgQW1wZWwgZ3JhdS48L3A+YD'
+              'sKICB9CiAgZnVuY3Rpb24gcGFnZShkYXRhKSB7CiAgICBjdXJyZW50RGF0YT1kYXRhOwogICAgcmV0dXJuIGA8ZGl2'
+              'IGNsYXNzPSJoZWFkaW5nLXJvdyI+PGRpdj48ZGl2IGNsYXNzPSJraWNrZXIiPlZJVEFMS09NUEFTUzwvZGl2PjxoMT'
+              '5IYkExYyAmYW1wOyBMYW5nemVpdGJsdXR6dWNrZXI8L2gxPjxwIGNsYXNzPSJzZWN0aW9uLW5vdGUiPkF1dG9tYXRp'
+              'c2NoZSBBdXN3ZXJ0dW5nIGJlc3TDpHRpZ3RlciBNZXNzdW5nZW4sIG9obmUgRGF0ZW53ZWl0ZXJnYWJlLjwvcD48L2'
+              'Rpdj48L2Rpdj48c2VjdGlvbiBjbGFzcz0icGFuZWwiIGlkPSJ2ay1oYmEtZGV0YWlsIj4ke2RldGFpbChkYXRhKX08'
+              'L3NlY3Rpb24+YDsKICB9CiAgZG9jdW1lbnQuYWRkRXZlbnRMaXN0ZW5lcignY2xpY2snLGU9PnsKICAgIGNvbnN0IG'
+              'VsPWUudGFyZ2V0LmNsb3Nlc3Q/LignW2RhdGEtaGItcGVyaW9kXScpO2lmKCFlbHx8IWN1cnJlbnREYXRhKXJldHVy'
+              'bjsKICAgIGNvbnN0IHNlbGVjdGVkPWVsLmRhdGFzZXQuaGJQZXJpb2Q7aWYoIXBlcmlvZHMuc29tZShwPT5wWzBdPT'
+              '09c2VsZWN0ZWQpKXJldHVybjsKICAgIGFjdGl2ZVBlcmlvZD1zZWxlY3RlZDtjb25zdCBob3N0PWRvY3VtZW50LnF1'
+              'ZXJ5U2VsZWN0b3IoJyN2ay1oYmEtZGV0YWlsJyk7aWYoaG9zdClob3N0LmlubmVySFRNTD1kZXRhaWwoY3VycmVudE'
+              'RhdGEpOwogIH0pOwogIHdpbmRvdy5WS19IQkExQz17aG9tZUNhcmQscGFnZSxyZWFkaW5ncyxyb2xsaW5nLGdyb3Vw'
+              'cyxsYXRlc3RMYWJ9Owp9KSgpOwo='
+          )
+          CSS64 = (
+              'LyogVml0YWxLb21wYXNzIDIuMC4xMSAtIEhiQTFjLUthcnRlIHVuZCByb2xsaWVyZW5kZXIgOTAtVGFnZS1WZXJsYX'
+              'VmICovCi52ay1oYmEtY2FyZHtib3JkZXItdG9wOjRweCBzb2xpZCAjNzQ4MzkyO2Rpc3BsYXk6ZmxleDtmbGV4LWRp'
+              'cmVjdGlvbjpjb2x1bW47Z2FwOjhweDtqdXN0aWZ5LWNvbnRlbnQ6ZmxleC1zdGFydDttaW4taGVpZ2h0OjE4MHB4fQ'
+              'oudmstaGJhLWNhcmQudmstaGJhLWdyZWVue2JvcmRlci10b3AtY29sb3I6IzE2ODA1ZDtiYWNrZ3JvdW5kOmxpbmVh'
+              'ci1ncmFkaWVudCgxMjVkZWcsI2ViZjlmMywjZmZmKX0KLnZrLWhiYS1jYXJkLnZrLWhiYS15ZWxsb3d7Ym9yZGVyLX'
+              'RvcC1jb2xvcjojYjU3YTA4O2JhY2tncm91bmQ6bGluZWFyLWdyYWRpZW50KDEyNWRlZywjZmZmN2UzLCNmZmYpfQou'
+              'dmstaGJhLWNhcmQudmstaGJhLXJlZHtib3JkZXItdG9wLWNvbG9yOiNjMjI4NDI7YmFja2dyb3VuZDpsaW5lYXItZ3'
+              'JhZGllbnQoMTI1ZGVnLCNmZmYwZjIsI2ZmZil9Ci52ay1oYmEtY2FyZC52ay1oYmEtZ3JheXtib3JkZXItdG9wLWNv'
+              'bG9yOiM3MTgzOTU7YmFja2dyb3VuZDpsaW5lYXItZ3JhZGllbnQoMTI1ZGVnLCNmMWY1ZjgsI2ZmZil9Ci52ay1oYm'
+              'EtY2FyZD5zdHJvbmd7Zm9udC1zaXplOjEuNXJlbSFpbXBvcnRhbnQ7bWFyZ2luOjJweCAwIWltcG9ydGFudH0KLnZr'
+              'LWhiYS1jYXJkIHNtYWxse2Rpc3BsYXk6YmxvY2s7Zm9udC1zaXplOi44cmVtO2xpbmUtaGVpZ2h0OjEuNH0KLnZrLW'
+              'hiYS1idXR0b257bWluLWhlaWdodDo0NnB4O2JhY2tncm91bmQ6IzE3NmQ4OTtjb2xvcjp3aGl0ZTtib3JkZXI6MDti'
+              'b3JkZXItcmFkaXVzOjExcHg7Zm9udC13ZWlnaHQ6ODAwO3dpZHRoOjEwMCU7cGFkZGluZzo5cHggNnB4O2ZvbnQtc2'
+              'l6ZTouOXJlbTttYXJnaW4tdG9wOmF1dG99Ci52ay1oYmEtc3RhdHVze2Rpc3BsYXk6ZmxleDthbGlnbi1pdGVtczpj'
+              'ZW50ZXI7Z2FwOjhweDtmb250LXNpemU6Ljg1cmVtO2ZvbnQtd2VpZ2h0Ojc1MDtsaW5lLWhlaWdodDoxLjM1O3BhZG'
+              'Rpbmc6N3B4IDlweDtib3JkZXItcmFkaXVzOjlweDtiYWNrZ3JvdW5kOiNmMGY0Zjc7Y29sb3I6IzQwNTU2NjttYXJn'
+              'aW46NnB4IDB9Ci52ay1oYmEtc3RhdHVzIGl7d2lkdGg6MTNweDtoZWlnaHQ6MTNweDtib3JkZXItcmFkaXVzOjUwJT'
+              'tiYWNrZ3JvdW5kOiM3NDgzOTI7ZmxleDpub25lfQoudmstaGJhLXN0YXR1cy52ay1oYmEtZ3JlZW4sLnZrLWhiYS1n'
+              'cmVlbiAudmstaGJhLXN0YXR1c3tiYWNrZ3JvdW5kOiNkZmY1ZTk7Y29sb3I6IzEyNTg0MH0KLnZrLWhiYS1zdGF0dX'
+              'MudmstaGJhLXllbGxvdywudmstaGJhLXllbGxvdyAudmstaGJhLXN0YXR1c3tiYWNrZ3JvdW5kOiNmZmYwY2Y7Y29s'
+              'b3I6IzgyNTUwMH0KLnZrLWhiYS1zdGF0dXMudmstaGJhLXJlZCwudmstaGJhLXJlZCAudmstaGJhLXN0YXR1c3tiYW'
+              'NrZ3JvdW5kOiNmY2UzZTY7Y29sb3I6IzkxMjYzOH0KLnZrLWhiYS1zdGF0dXMudmstaGJhLWdyZWVuIGksLnZrLWhi'
+              'YS1ncmVlbiAudmstaGJhLXN0YXR1cyBpe2JhY2tncm91bmQ6IzE2ODA1ZH0KLnZrLWhiYS1zdGF0dXMudmstaGJhLX'
+              'llbGxvdyBpLC52ay1oYmEteWVsbG93IC52ay1oYmEtc3RhdHVzIGl7YmFja2dyb3VuZDojYjU3YTA4fQoudmstaGJh'
+              'LXN0YXR1cy52ay1oYmEtcmVkIGksLnZrLWhiYS1yZWQgLnZrLWhiYS1zdGF0dXMgaXtiYWNrZ3JvdW5kOiNjMjI4ND'
+              'J9Ci52ay1oYmEtc3VtbWFyeXtkaXNwbGF5OmdyaWQ7Z3JpZC10ZW1wbGF0ZS1jb2x1bW5zOnJlcGVhdCgzLG1pbm1h'
+              'eCgwLDFmcikpO2dhcDo5cHg7bWFyZ2luLWJvdHRvbToxMnB4fQoudmstaGJhLXN1bW1hcnk+ZGl2e2JvcmRlcjoxcH'
+              'ggc29saWQgI2RjZTdlZTtiYWNrZ3JvdW5kOiNmNmZhZmM7cGFkZGluZzoxMXB4O2JvcmRlci1yYWRpdXM6MTNweDtt'
+              'aW4td2lkdGg6MH0KLnZrLWhiYS1zdW1tYXJ5IHNtYWxse2Rpc3BsYXk6YmxvY2s7Y29sb3I6IzUzNmI3YTtsaW5lLW'
+              'hlaWdodDoxLjQ7Zm9udC1zaXplOi44M3JlbX0KLnZrLWhiYS1zdW1tYXJ5IHN0cm9uZ3tkaXNwbGF5OmJsb2NrO2Zv'
+              'bnQtc2l6ZToxLjQ1cmVtO21hcmdpbjo4cHggMCAycHg7Y29sb3I6IzE0NWE3Yn0KLnZrLWhiYS1zdW1tYXJ5IHN0cm'
+              '9uZyBzcGFue2ZvbnQtc2l6ZTouODVyZW19Ci52ay1oYmEtcGlja2Vye2Rpc3BsYXk6Z3JpZDtncmlkLXRlbXBsYXRl'
+              'LWNvbHVtbnM6cmVwZWF0KDMsbWlubWF4KDAsMWZyKSk7Z2FwOjdweDttYXJnaW46MThweCAwfQoudmstaGJhLXBpY2'
+              'tlciBidXR0b257YmFja2dyb3VuZDojZTlmMmY4O2NvbG9yOiMxYzU2NzM7Ym9yZGVyOjFweCBzb2xpZCAjYzZkOGU1'
+              'O2JvcmRlci1yYWRpdXM6MTBweDtwYWRkaW5nOjlweCA2cHg7bWluLWhlaWdodDo0MnB4O2ZvbnQtc2l6ZTouODhyZW'
+              '07Zm9udC13ZWlnaHQ6NzQwfQoudmstaGJhLXBpY2tlciBidXR0b25bYXJpYS1wcmVzc2VkPSJ0cnVlIl17YmFja2dy'
+              'b3VuZDojMTc2ZDg5O2JvcmRlci1jb2xvcjojMTc2ZDg5O2NvbG9yOndoaXRlfQojdmstaGJhLWRldGFpbCBoM3ttYX'
+              'JnaW46MThweCAwIDExcHg7Zm9udC1zaXplOjFyZW07Y29sb3I6IzIzNTM2ZH0KLnZrLWhiYS1jaGFydC1zY3JvbGx7'
+              'd2lkdGg6MTAwJTttYXgtd2lkdGg6MTAwJTtvdmVyZmxvdy14OmF1dG87Ym9yZGVyOjFweCBzb2xpZCAjZTJlYmVmO2'
+              'JvcmRlci1yYWRpdXM6MTJweDtvdmVyc2Nyb2xsLWJlaGF2aW9yLXg6Y29udGFpbjstd2Via2l0LW92ZXJmbG93LXNj'
+              'cm9sbGluZzp0b3VjaH0KLnZrLWhiYS1jaGFydC1zY3JvbGwgc3Zne2Rpc3BsYXk6YmxvY2s7bWF4LXdpZHRoOm5vbm'
+              'UhaW1wb3J0YW50O2hlaWdodDoyNTVweCFpbXBvcnRhbnR9Ci52ay1oYmEtbm90ZSwudmstaGJhLWxhYiwudmstaGJh'
+              'LWNhdXRpb257YmFja2dyb3VuZDojZjNmOGZjO2JvcmRlci1sZWZ0OjRweCBzb2xpZCAjNTg5M2E4O2JvcmRlci1yYW'
+              'RpdXM6OXB4O3BhZGRpbmc6MTFweCAxMnB4O21hcmdpbjoxMnB4IDA7Y29sb3I6IzM1NTQ2Yjtmb250LXNpemU6Ljg5'
+              'cmVtO2xpbmUtaGVpZ2h0OjEuNTV9Ci52ay1oYmEtY2F1dGlvbntiYWNrZ3JvdW5kOiNmZmY5ZWM7Ym9yZGVyLWxlZn'
+              'QtY29sb3I6I2I0ODkzMjtjb2xvcjojNWQ0YTJmfQoudmstaGJhLXRhYmxle3dpZHRoOjEwMCU7bWF4LXdpZHRoOjEw'
+              'MCU7b3ZlcmZsb3cteDphdXRvfQoudmstaGJhLXRhYmxlIHRhYmxle21pbi13aWR0aDo2MzBweH0KLnZrLWhiYS10YW'
+              'JsZS1zdGF0dXN7Zm9udC13ZWlnaHQ6NzUwO2ZvbnQtc2l6ZTouODVyZW19Ci52ay1oYmEtdGFibGUtc3RhdHVzLnZr'
+              'LWhiYS1ncmVlbntjb2xvcjojMTE2ZDRkfQoudmstaGJhLXRhYmxlLXN0YXR1cy52ay1oYmEteWVsbG93e2NvbG9yOi'
+              'M5MTYyMGN9Ci52ay1oYmEtdGFibGUtc3RhdHVzLnZrLWhiYS1yZWR7Y29sb3I6I2EzMjIzOX0KLnZrLWhiYS10YWJs'
+              'ZS1zdGF0dXMudmstaGJhLWdyYXl7Y29sb3I6IzY0NzQ4Mn0KQG1lZGlhKG1heC13aWR0aDo3NTBweCl7LnZrLWhiYS'
+              '1zdW1tYXJ5e2dyaWQtdGVtcGxhdGUtY29sdW1uczoxZnJ9LnZrLWhiYS1zdW1tYXJ5IHN0cm9uZ3tmb250LXNpemU6'
+              'MS4yNXJlbX0udmstaGJhLWNhcmR7cGFkZGluZzoxM3B4IWltcG9ydGFudH0udmstaGJhLXRhYmxlIHRhYmxle21pbi'
+              '13aWR0aDowIWltcG9ydGFudH19CkBtZWRpYSBwcmludHsudmstaGJhLXBpY2tlciwudmstaGJhLWJ1dHRvbntkaXNw'
+              'bGF5Om5vbmUhaW1wb3J0YW50fS52ay1oYmEtY2hhcnQtc2Nyb2xse292ZXJmbG93OnZpc2libGUhaW1wb3J0YW50fS'
+              '52ay1oYmEtY2hhcnQtc2Nyb2xsIHN2Z3t3aWR0aDoxMDAlO21heC13aWR0aDoxMDAlIWltcG9ydGFudH19Cg=='
+          )
+          
+          HERE=Path('.')
+          app=HERE/'app.js'
+          style=HERE/'style.css'
+          index=HERE/'index.html'
+          sw=HERE/'sw.js'
+          version=HERE/'version.json'
+          for f in (app,style,index,sw,version):
+              if not f.exists():
+                  raise RuntimeError(f'Datei fehlt: {f}. Keine Aenderungen vorgenommen.')
+          
+          text=app.read_text(encoding='utf-8')
+          if "const VERSION='2.0.11'" in text and (HERE/'hba1c.js').exists():
+              print('VitalKompass 2.0.11 ist bereits installiert. Keine weitere Aenderung.')
+              raise SystemExit(0)
+          if "const VERSION='2.0.10'" not in text:
+              raise RuntimeError('Unbekannte App-Version – aus Sicherheitsgruenden abgebrochen.')
+          
+          # Vor allen Datei-Schreiboperationen: Test aller Strukturmarker.
+          original={f:f.read_text(encoding='utf-8') for f in (app,style,index,sw,version)}
+          def replace_once(value,old,new,label):
+              if value.count(old)!=1:
+                  raise RuntimeError(f'{label}: Struktur stimmt nicht mehr, Update sicher abgebrochen ({value.count(old)} Treffer).')
+              return value.replace(old,new,1)
+          
+          out=original[app]
+          out=replace_once(out,"const VERSION='2.0.10'","const VERSION='2.0.11'",'Version')
+          out=replace_once(out,"const content={start:pageStart,","const content={hba1c:()=>window.VK_HBA1C.page(data),start:pageStart,",'Seiten-Routing')
+          out=replace_once(out,
+              'function pageStart(){let old=pageStartOld();',
+              """function pageStart(){let old=pageStartOld();const hbaAnchor='<div class="metric"><span>Blutdruck diesen Monat</span>';const hbaAt=old.indexOf(hbaAnchor);if(hbaAt>=0){const hbaEnd=old.indexOf('</div>',hbaAt);if(hbaEnd>=0)old=old.slice(0,hbaEnd+6)+window.VK_HBA1C.homeCard(data)+old.slice(hbaEnd+6);}""",
+              'Startkarten-Position')
+          out=replace_once(out,
+              "[['glucose','Diabetes & Blutzucker','◆'],",
+              "[['glucose','Diabetes & Blutzucker','◆'],['hba1c','HbA1c / Langzeitblutzucker','◷'],",
+              'Menue-Eintrag')
+          
+          html=replace_once(original[index],
+              '<script src="app.js" defer></script>',
+              '<script src="hba1c.js" defer></script><script src="app.js" defer></script>',
+              'Lade-Reihenfolge')
+          newcss=original[style]+ '\n'+base64.b64decode(CSS64).decode('utf-8')+'\n'
+          newjs=base64.b64decode(JS64).decode('utf-8')
+          newsw=replace_once(original[sw],"'./app.js',","'./app.js','./hba1c.js',",'Offline-Dateiliste')
+          newsw=replace_once(newsw,"'app.js','style.css'","'app.js','hba1c.js','style.css'",'Online-Update')
+          newsw=replace_once(newsw,"const CACHE='vital-kompass-2.0.10-repair-checked'","const CACHE='vital-kompass-2.0.11-hba1c'",'Cache-Versionskennung')
+          newsw=newsw.replace('VitalKompass 2.0.10:', 'VitalKompass 2.0.11:',1)
+          vers=json.loads(original[version]);
+          if vers.get('version')!='2.0.10':
+              raise RuntimeError('Versionsdatei weicht von 2.0.10 ab: Abbruch.')
+          vers.update(version='2.0.11',released='2026-11-02',notes='HbA1c-Langzeitblutzucker: lokale 90-Tage-Auswertung mit Ampel, Tabellen, Tag/7 Tage/Woche/Monat/Jahr/10 Jahre; Laborwerte getrennt. Keine Veraenderung der verschluesselten Datenbank.')
+          newversion=json.dumps(vers,ensure_ascii=False,indent=2)+'\n'
+          
+          # Updates sind ausschliesslich Quellcodedateien, keine gespeicherten Gesundheitsdaten.
+          app.write_text(out,encoding='utf-8')
+          style.write_text(newcss,encoding='utf-8')
+          index.write_text(html,encoding='utf-8')
+          sw.write_text(newsw,encoding='utf-8')
+          version.write_text(newversion,encoding='utf-8')
+          (HERE/'hba1c.js').write_text(newjs,encoding='utf-8')
+          print('HbA1c-Update 2.0.11 angelegt. Alter Tresor und alle Messwerte unveraendert.')
+          PY_VK211
+      - name: JavaScript auf Syntax und HbA1c-Berechnung pruefen
+        shell: bash
+        run: |
+          node --check app.js
+          node --check hba1c.js
+          node - <<'NODE_VK211'
+          const fs=require('node:fs'),assert=require('node:assert/strict'),vm=require('node:vm');
+          const file=fs.readFileSync('hba1c.js','utf8');
+          let api,events=[];
+          const dom={addEventListener:(name,fn)=>events.push(name)};
+          const sandbox={document:dom,window:{},Date,Set,Map,Number,String,Array,Math,Intl};
+          vm.runInNewContext(file,sandbox,{filename:'hba1c.js'});
+          api=sandbox.window.VK_HBA1C;
+          assert(api&&typeof api.rolling==='function'&&typeof api.page==='function');
+          const end='2026-11-02',base=Date.parse(end+'T12:00:00Z');
+          const records=[];
+          for(let d=0;d<60;d++) {
+            const date=new Date(base-d*86400000).toISOString().slice(0,10);
+            records.push({date,time:'08:00',type:'glucose',period:'fasting',verified:true,mgdl:108});
+          }
+          const data={measurements:records,labs:[]};
+          const all=api.readings(data);
+          assert.equal(all.length,60);
+          const s=api.rolling(all,end);
+          assert(s.eligible&&s.count===60&&s.days===60);
+          assert(Math.abs(s.mean-108)<0.001);
+          assert(Math.abs(s.est-(108+46.7)/28.7)<0.0001);
+          const old={date:'2026-07-01',mgdl:500};
+          assert.equal(api.rolling([...all,old],end).count,60,'Alte Werte ausgeschlossen');
+          const unchecked={...records[0],verified:false};
+          assert.equal(api.readings({...data,measurements:[...records,unchecked]}).length,60);
+          assert(api.homeCard(data).includes('data-view="hba1c"'));
+          assert(api.page(data).includes('Langzeitblutzucker-Tabelle'));
+          for(const p of ['day','7d','week','month','year','10y'])assert(Array.isArray(api.groups(all,p,end)),p);
+          assert(api.groups(all,'7d',end).length<=7);
+          assert(fs.readFileSync('index.html','utf8').includes('src="hba1c.js"'));
+          assert(fs.readFileSync('sw.js','utf8').includes("'./hba1c.js'"));
+          assert(JSON.parse(fs.readFileSync('version.json','utf8')).version==='2.0.11');
+          console.log('Tests bestanden: 90-Tage-Rueckblick, Ausschluss ungepruefter Werte, HbA1c-Formel, 6 Zeitraeume, Offline-Datei, Version.');
+          NODE_VK211
+      - name: Update veroeffentlichen
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.js hba1c.js style.css index.html sw.js version.json
+          if git diff --cached --quiet; then
+            echo "VitalKompass ist bereits auf 2.0.11."
+          else
+            git commit -m "VitalKompass 2.0.11: HbA1c 90-Tage-Auswertung"
+            git push origin HEAD:main
+          fi
