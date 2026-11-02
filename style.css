@@ -551,3 +551,19 @@ body.vk207-zoom-active{overflow:hidden}
 @media(max-width:750px){.vk-hba-summary{grid-template-columns:1fr}.vk-hba-summary strong{font-size:1.25rem}.vk-hba-card{padding:13px!important}.vk-hba-table table{min-width:0!important}}
 @media print{.vk-hba-picker,.vk-hba-button{display:none!important}.vk-hba-chart-scroll{overflow:visible!important}.vk-hba-chart-scroll svg{width:100%;max-width:100%!important}}
 
+
+/* VitalKompass 2.0.12: Monatsarchiv, 10-Jahre-Uebersicht, echtes Diagramm-Zoom */
+.vk212-month-nav{display:grid;grid-template-columns:minmax(0,1fr) minmax(145px,1.4fr) minmax(0,1fr);gap:7px;align-items:end;margin:8px 0 17px;padding:12px;border:1px solid #c5dbe7;border-radius:13px;background:#f4f9fc}
+.vk212-month-nav button{min-width:0;padding:10px 5px;min-height:48px;border:1px solid #aec6d6;border-radius:9px;background:#e5f1f9;color:#154d69;font-weight:800}
+.vk212-month-nav button:disabled{opacity:.42;cursor:default}
+.vk212-month-nav label{display:flex;min-width:0;flex-direction:column;gap:4px;color:#2c566d;font-weight:750;font-size:.85rem}
+.vk212-month-nav input{width:100%;min-width:0;min-height:48px;padding:7px 5px;font-size:16px;text-align:center;background:white}
+.vk212-month-nav small{grid-column:1/-1;color:#476273;line-height:1.4}
+#main .vk207-glucose-wrap.vk212-ten-overview{width:100%;overflow:hidden!important;touch-action:pan-y}
+#main .vk207-glucose-wrap.vk212-ten-overview svg.chart{width:100%!important;min-width:0!important;max-width:100%!important;height:auto!important;display:block}
+.vk207-zoom-viewport{overflow:auto!important;-webkit-overflow-scrolling:touch!important;touch-action:pan-x pan-y}
+.vk207-zoom-canvas{width:auto!important;max-width:none!important;min-width:0;height:auto!important;display:block}
+.vk207-zoom-canvas svg.chart{width:100%!important;height:auto!important;max-width:none!important;min-width:0!important;display:block}
+@media(max-width:410px){.vk212-month-nav{grid-template-columns:minmax(0,1fr) minmax(110px,1.5fr) minmax(0,1fr);gap:5px;padding:8px}.vk212-month-nav button{font-size:.82rem}.vk212-month-nav label{font-size:.72rem}.vk207-dialog-actions{gap:4px}.vk207-dialog-actions button{min-height:38px;min-width:32px;font-size:.81rem;padding:6px}}
+@media print {.vk212-month-nav,.vk207-modal{display:none!important}}
+

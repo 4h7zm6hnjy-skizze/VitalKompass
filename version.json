@@ -1,5 +1,5 @@
 {
-  "version": "2.0.11",
+  "version": "2.0.12",
   "released": "2026-11-02",
-  "notes": "HbA1c-Langzeitblutzucker: lokale 90-Tage-Auswertung mit Ampel, Tabellen, Tag/7 Tage/Woche/Monat/Jahr/10 Jahre; Laborwerte getrennt. Keine Veraenderung der verschluesselten Datenbank."
+  "notes": "Monatsarchiv in Diagrammen, 10-Jahre-Gesamtansicht und vergroesserbarer, verschiebbarer Diagramm-Zoom. Keine Aenderung am privaten Datentresor."
 }
