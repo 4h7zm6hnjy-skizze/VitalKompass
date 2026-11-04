@@ -647,3 +647,18 @@ body.vk207-zoom-active{overflow:hidden}
 @media(min-width:800px){.vk215-vital-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:359px){.vk215-vital-grid{grid-template-columns:1fr}.vk215-analysis-tabs{grid-template-columns:1fr}}
 @media print{.vk215-analysis-tabs,.vk215-related{display:none!important}}
+
+/* VitalKompass 2.0.16: neue Startkacheln, Fachrichtungsordner, Arztberichte */
+.vk216-home-section{margin-bottom:16px}.vk216-home-section h2{margin:5px 0 12px}
+.vk216-home-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:11px}
+.vk216-home-card{position:relative;min-height:119px;padding:14px 15px;text-align:left;background:#fff;border:2px solid #d5e2ed;border-left-width:6px;border-radius:14px;box-shadow:0 2px 12px #12344b0d;display:flex;flex-direction:column;gap:5px;color:#12324d}
+.vk216-home-card span{font-size:.91rem;font-weight:750}.vk216-home-card strong{font-size:1.33rem;overflow-wrap:anywhere}.vk216-home-card small{color:#51687a;font-size:.8rem;line-height:1.4;max-width:calc(100% - 7px)}
+.vk216-status-green{border-left-color:#1b946a!important}.vk216-status-yellow{border-left-color:#d69319!important}.vk216-status-red{border-left-color:#c3273d!important}.vk216-status-gray{border-left-color:#8293a4!important}
+.vk216-light{position:absolute;right:12px;top:14px;width:12px;height:12px;border-radius:50%;background:#8293a4}.vk216-status-green .vk216-light{background:#1b946a}.vk216-status-yellow .vk216-light{background:#d69319}.vk216-status-red .vk216-light{background:#c3273d}
+.vk216-collapse{border:1px solid #c7d8e5;border-radius:11px;padding:10px 12px;margin:10px 0;background:#f8fbfe}.vk216-collapse summary{font-weight:800;cursor:pointer;min-height:32px;padding:3px 0}
+.vk216-rows{display:grid;gap:8px;max-height:480px;overflow-y:auto;margin:12px 0}.vk216-rows>div{background:#fff;border:1px solid #dae6ee;border-radius:10px;padding:11px}.vk216-rows small{display:block;color:#48677e;margin:4px 0}
+.vk216-chart svg{max-width:100%;height:auto}.vk216-specialty .panel{margin-bottom:13px}.vk216-doctor-actions{border-top:4px solid #087a75}
+.vk216-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.vk216-metrics>div{padding:12px;border:1px solid #d0e1eb;border-radius:9px}.vk216-metrics strong{display:block;font-size:1.24rem}.vk216-metrics small{display:block}
+.vk216-inline-state{border-left:5px solid #8293a4;padding:13px;background:#f4f8fb}.vk216-inline-state strong{font-size:1.5rem}
+@media(max-width:490px){.vk216-home-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.vk216-home-card{padding:11px 9px;min-height:123px}.vk216-home-card strong{font-size:1.10rem}.vk216-home-card small{font-size:.73rem}.vk-bottom-nav{gap:3px!important;padding-left:5px!important;padding-right:5px!important}.vk-bottom-nav button{font-size:.87rem!important;padding:10px 2px!important;white-space:normal!important;line-height:1.15}.vk216-metrics{grid-template-columns:1fr 1fr}}
+@media print{.vk216-home-card,.vk216-doctor-actions{break-inside:avoid}.vk216-collapse summary{display:none}}

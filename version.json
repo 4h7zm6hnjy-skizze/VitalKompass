@@ -1,5 +1,5 @@
 {
-  "version": "2.0.15",
-  "released": "2026-11-02",
-  "notes": "Gemeinsame Neuordnung: sieben einklappbare Hauptbereiche, eindeutige Startseite, Diabetes/HbA1c verknüpft, Analysen und Statistiken zusammengeführt, GdB-Dokumente fachlich getrennt, Krankenhaus-Scans zentral. Datenbank und Originale unverändert."
+  "version": "2.0.16",
+  "released": "2026-11-04",
+  "notes": "Sechs Facharztbereiche inklusive Pneumologie, Startseite mit sieben Ampelkacheln und PSA-Verlauf, Vital-Ansicht mit SpO2, Originalbefunde mit Arzt/Datum/Folgetermin und fachbezogene DIN-A4-Arzt-PDFs. Bestehende Daten verschlüsselt erhalten."
 }
