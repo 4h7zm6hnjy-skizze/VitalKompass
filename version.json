@@ -1,5 +1,5 @@
 {
-  "version": "2.0.16",
+  "version": "2.0.17",
   "released": "2026-11-04",
-  "notes": "Sechs Facharztbereiche inklusive Pneumologie, Startseite mit sieben Ampelkacheln und PSA-Verlauf, Vital-Ansicht mit SpO2, Originalbefunde mit Arzt/Datum/Folgetermin und fachbezogene DIN-A4-Arzt-PDFs. Bestehende Daten verschlüsselt erhalten."
+  "notes": "PneumoPro-artiges Symptomtagebuch mit Mehrfachwahl, eigenen Beschwerden, Bedarfsspray, verschlüsselter Speicherung, Startseiten-Eingabe, Auswertung, Kalender und Arzt-PDF."
 }
