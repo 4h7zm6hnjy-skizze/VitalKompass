@@ -1,5 +1,5 @@
 {
-  "version": "2.0.17",
-  "released": "2026-11-04",
-  "notes": "PneumoPro-artiges Symptomtagebuch mit Mehrfachwahl, eigenen Beschwerden, Bedarfsspray, verschlüsselter Speicherung, Startseiten-Eingabe, Auswertung, Kalender und Arzt-PDF."
+  "version": "2.0.18",
+  "released": "2026-11-21",
+  "notes": "Patientengebundener ChatGPT-Laborimport direkt im Bereich Laborwerte: ChatGPT-Vorlage kopieren, JSON einfügen, Katalog-, Einheiten- und Referenzprüfung, sichere Übernahme als ungeprüfte Laborwerte."
 }
