@@ -662,3 +662,15 @@ body.vk207-zoom-active{overflow:hidden}
 .vk216-inline-state{border-left:5px solid #8293a4;padding:13px;background:#f4f8fb}.vk216-inline-state strong{font-size:1.5rem}
 @media(max-width:490px){.vk216-home-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.vk216-home-card{padding:11px 9px;min-height:123px}.vk216-home-card strong{font-size:1.10rem}.vk216-home-card small{font-size:.73rem}.vk-bottom-nav{gap:3px!important;padding-left:5px!important;padding-right:5px!important}.vk-bottom-nav button{font-size:.87rem!important;padding:10px 2px!important;white-space:normal!important;line-height:1.15}.vk216-metrics{grid-template-columns:1fr 1fr}}
 @media print{.vk216-home-card,.vk216-doctor-actions{break-inside:avoid}.vk216-collapse summary{display:none}}
+
+
+/* VitalKompass 2.0.20: alle gespeicherten Laborwerte und Ampelfilter. */
+.vk219-lab-filter{display:grid;grid-template-columns:minmax(190px,1fr) minmax(180px,1fr);align-items:center;gap:10px 14px;padding:14px;margin:12px 0;background:#f3f8fb;border:1px solid #c9dce9;border-radius:13px}
+.vk219-lab-filter label{font-weight:750;color:#164968}
+.vk219-lab-filter select{width:100%;min-height:46px;max-width:100%;padding:9px 12px;border:1px solid #9ab9cf;border-radius:10px;background:#fff;color:#15364c;font-size:1rem}
+.vk219-lab-totals{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:5px}
+.vk219-lab-totals .chip{white-space:nowrap}
+.vk219-lab-table tr[data-vk219-status="red"]{border-left:4px solid #c22842}
+.vk219-lab-table tr[data-vk219-status="orange"]{border-left:4px solid #b87910}
+.vk219-lab-table tr[data-vk219-status="green"]{border-left:4px solid #16805d}
+@media(max-width:600px){.vk219-lab-filter{grid-template-columns:minmax(0,1fr)}.vk219-lab-totals{grid-column:1}.vk219-lab-totals .chip{font-size:.76rem}}
