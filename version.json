@@ -1,5 +1,5 @@
 {
-  "version": "2.0.18",
+  "version": "2.0.19",
   "released": "2026-11-21",
-  "notes": "Patientengebundener ChatGPT-Laborimport direkt im Bereich Laborwerte: ChatGPT-Vorlage kopieren, JSON einfügen, Katalog-, Einheiten- und Referenzprüfung, sichere Übernahme als ungeprüfte Laborwerte."
+  "notes": "Verbesserte ChatGPT-Laborvorlage: strikte JSON-Syntax, Laborwerte immer als Array, getrennte Liste nicht zugeordneter Werte. Bestehende Gesundheitsdaten und Importprüfungen unverändert."
 }

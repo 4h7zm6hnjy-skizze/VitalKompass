@@ -1,7 +1,7 @@
 /* VitalKompass v1.9.7 — lokal, keine externen Bibliotheken, keine Analytics */
 'use strict';
 (() => {
-const VERSION='2.0.18', DB='vitalkompass-secure-v1', STORE='safe', KEY='vault';
+const VERSION='2.0.19', DB='vitalkompass-secure-v1', STORE='safe', KEY='vault';
 const root=document.getElementById('root');
 const $=(q,scope=document)=>scope.querySelector(q);
 const $$=(q,scope=document)=>Array.from(scope.querySelectorAll(q));
@@ -1411,16 +1411,19 @@ function vk218ChatPrompt(){
   const birthday=String(data.profile?.birthday||'').trim();
   const catalog=LABCATALOG.map(x=>`${x.name} | ${x.unit||'(ohne Einheit)'}`).join('\n');
   return [
-    'Erstelle aus meinem hochgeladenen Laborbefund einen Import für VitalKompass. Lies nur Werte, die im Originalbefund tatsächlich erkennbar sind. Rate keine Werte, Daten, Einheiten oder Referenzgrenzen. Keine medizinische Diagnose.',
-    `Patient exakt wie in meiner eigenen VitalKompass-App: ${patient}.`,
-    birthday?`Geburtsdatum zur Patientenprüfung (falls auf dem Befund vorhanden): ${birthday}.`:'',
-    'Antwort ausschließlich mit einem gültigen JSON-Objekt, ohne Markdown, Kommentar oder zusätzlichen Text.',
-    'Schema: {"format":"vitalkompass-lab-import-v1","patient":{"name":"PATIENT"},"labs":[{"type":"lab","date":"JJJJ-MM-TT","name":"KATALOGNAME","unit":"KATALOGEINHEIT","value":1.23,"low":null,"high":null,"comparator":"","place":"","note":""}]}',
-    `Setze patient.name exakt auf ${JSON.stringify(patient)}.${birthday?' Wenn das Geburtsdatum sicher übereinstimmt, ergänze patient.birthday als JJJJ-MM-TT.':''}`,
-    'Jeder Laboreintrag: type immer "lab"; date = tatsächliches Entnahmedatum im ISO-Format; name und unit müssen genau dem nachstehenden Katalog entsprechen; value ist eine JSON-Zahl mit Punkt als Dezimalzeichen; Referenzgrenzen low/high sind Zahlen oder null, niemals geschätzt; comparator ist nur "", "<" oder ">"; place und note sind kurze Texte.',
-    'Bei "<"/">" den angegebenen Zahlwert als value übernehmen und das Zeichen im comparator erfassen. Keine stillschweigenden Umrechnungen zwischen Einheiten. Bei unterschiedlicher Originaleinheit nur bei eindeutig korrekter, nachvollziehbarer Umrechnung arbeiten; ansonsten nicht importieren.',
-    'Nicht sicher erkennbare oder nicht zuordenbare Werte nicht in labs aufnehmen. Gib diese getrennt unter "nicht_zugeordnet" als Liste mit dem Originalnamen und einem kurzen Grund an. Erfinde keine Ersatzangaben.',
-    'Es dürfen keine Werte einer anderen Person enthalten sein. Wenn Patient oder Befunddatum unklar sind, frage nach, statt JSON mit erfundenen Angaben zu erzeugen.',
+    'Erstelle aus meinem hochgeladenen Laborbefund einen patientengebundenen VitalKompass-Laborimport. Verwende ausschließlich Angaben, die im Originalbefund tatsächlich lesbar sind. Erfinde keine Werte, Daten, Einheiten oder Referenzgrenzen. Keine Diagnose.',
+    `Patient exakt wie im Notfallpass meiner VitalKompass-App: ${patient}.`,
+    birthday?`Geburtsdatum zur zusätzlichen Patientenprüfung, sofern im Befund eindeutig erkennbar: ${birthday}.`:'',
+    'WICHTIG: Antworte ausschließlich mit EINEM syntaktisch gültigen JSON-Objekt. Keine Markdown-Codeblöcke, keine Erklärung davor oder danach, keine Kommentare.',
+    'JSON-SYNTAX: Benutze für jeden Schlüssel und jede Zeichenkette ausschließlich normale gerade doppelte Anführungszeichen (ASCII-Zeichen U+0022). Niemals typografische Anführungszeichen wie “ oder ”. Keine Kommas am Ende einer Liste oder eines Objekts.',
+    'ABSOLUT WICHTIG: "labs" muss IMMER ein JSON-Array in eckigen Klammern sein: "labs":[{...},{...}]. JEDER Laborwert ist EIN eigenes Objekt innerhalb dieses Arrays. Die Objekte müssen durch Kommas getrennt sein. Niemals ein einzelnes Objekt als "labs" setzen.',
+    'Auch "nicht_zugeordnet" muss IMMER ein JSON-Array sein und AUSSERHALB des Arrays "labs" stehen; falls keine unklaren Werte vorhanden sind, setze "nicht_zugeordnet":[]. Bei unklaren Werten: "nicht_zugeordnet":[{"originalname":"Originalbezeichnung","grund":"Grund der Nichtzuordnung"}].',
+    'Verbindliche JSON-Struktur mit Platzhaltern, die anhand des Befunds zu ersetzen sind (Beispielwerte NICHT übernehmen): {"format":"vitalkompass-lab-import-v1","patient":{"name":"PATIENT"},"labs":[{"type":"lab","date":"JJJJ-MM-TT","name":"KATALOGNAME","unit":"KATALOGEINHEIT","value":1.23,"low":null,"high":null,"comparator":"","place":"","note":""}],"nicht_zugeordnet":[]}',
+    `Setze patient.name exakt auf ${JSON.stringify(patient)}.${birthday?' Wenn das Geburtsdatum eindeutig übereinstimmt, ergänze patient.birthday im Format JJJJ-MM-TT.':''}`,
+    'Jeder Laboreintrag muss diese Schlüssel enthalten: type ist immer "lab"; date ist das tatsächliche Entnahmedatum im ISO-Format; name und unit müssen Zeichen für Zeichen dem untenstehenden VitalKompass-Katalog entsprechen; value ist eine echte JSON-Zahl mit Dezimalpunkt, nicht als Text; low/high sind Zahlen oder null; comparator ist nur "", "<" oder ">"; place und note sind Texte.',
+    'Bei Angaben wie <0.80 den Zahlwert als value und "<" als comparator speichern. Nie stillschweigend Einheiten umrechnen. Bei nicht eindeutig möglicher Einheitenzuordnung oder Umrechnung den Wert ausschließlich unter nicht_zugeordnet aufführen.',
+    'Bei fehlendem eindeutigen Patienten oder Entnahmedatum zuerst nachfragen. Keine Laborwerte einer anderen Person übernehmen.',
+    'Kontrolliere die JSON-Struktur vor der Ausgabe gedanklich auf parsebare Syntax: exakt ein äußeres Objekt, "labs" in [ ], alle Laboreinträge in { }, alle Schlüssel in geraden Anführungszeichen, "nicht_zugeordnet" außerhalb des labs-Arrays.',
     'Gültige VitalKompass-Katalognamen und Einheiten (Name | Einheit):',
     catalog
   ].filter(Boolean).join('\n\n');
