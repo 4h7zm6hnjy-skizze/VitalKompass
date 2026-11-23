@@ -674,3 +674,10 @@ body.vk207-zoom-active{overflow:hidden}
 .vk219-lab-table tr[data-vk219-status="orange"]{border-left:4px solid #b87910}
 .vk219-lab-table tr[data-vk219-status="green"]{border-left:4px solid #16805d}
 @media(max-width:600px){.vk219-lab-filter{grid-template-columns:minmax(0,1fr)}.vk219-lab-totals{grid-column:1}.vk219-lab-totals .chip{font-size:.76rem}}
+
+/* 2.0.21 Kardiologie */
+.vk220-cardiology .vk220-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:12px;margin:12px 0;}
+.vk220-cardiology .vk220-grid>.field{min-width:0;}
+.vk220-cardiology .vk220-checked{display:flex;gap:10px;align-items:center;margin:15px 0;font-weight:600;}
+.vk220-cardiology .vk220-checked input{width:20px;height:20px;flex:none;}
+.vk220-cardiology textarea{width:100%;min-height:98px;}

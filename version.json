@@ -1,5 +1,5 @@
 {
-  "version": "2.0.20",
-  "released": "2026-11-21",
-  "notes": "Alle gespeicherten Laborwerte ohne 60er-Begrenzung sichtbar; Filter Alle/Rot/Orange/Grün mit Anzahl, Referenz-basierte Ampel und eigenständigem Ungeprüft-Hinweis."
+  "version": "2.0.21",
+  "released": "2026-11-23",
+  "notes": "Kardiologie: EKG, Langzeit-EKG, Belastungsdiagnostik, Herzultraschall, Langzeit-Blutdruck, Herz-CT/MRT, Herzkatheter und weitere Untersuchungen, strukturierte Werte, Arztbericht/PDF und lokale verschlüsselte Speicherung."
 }

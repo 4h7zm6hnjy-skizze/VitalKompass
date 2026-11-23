@@ -1,7 +1,7 @@
 /* VitalKompass v1.9.7 — lokal, keine externen Bibliotheken, keine Analytics */
 'use strict';
 (() => {
-const VERSION='2.0.20', DB='vitalkompass-secure-v1', STORE='safe', KEY='vault';
+const VERSION='2.0.21', DB='vitalkompass-secure-v1', STORE='safe', KEY='vault';
 const root=document.getElementById('root');
 const $=(q,scope=document)=>scope.querySelector(q);
 const $$=(q,scope=document)=>Array.from(scope.querySelectorAll(q));
@@ -163,7 +163,7 @@ function tag(title,description){return `<div class="heading-row"><div><div class
 /* VitalKompass 2.0.3: Navigation und Körpermaße – keine Änderungen am Datenspeicher. */
 const VK203_MENU=[
  ['Startseite',[['start','Gesundheitsübersicht','⌂']]],
- ['Ärztliche Fachrichtungen',[['specialty-diabetology','1 · Diabetologie','◆'],['specialty-urology','2 · Urologie','◈'],['specialty-hospital','3 · Krankenhaus','▤'],['specialty-gp','4 · Hausarzt','✚'],['specialty-ophthalmology','5 · Augenarzt / Diabetes-Augen','◉'],['specialty-pneumology','6 · Pneumologie','♧']]],
+ ['Ärztliche Fachrichtungen',[['specialty-diabetology','1 · Diabetologie','◆'],['specialty-urology','2 · Urologie','◈'],['specialty-hospital','3 · Krankenhaus','▤'],['specialty-gp','4 · Hausarzt','✚'],['specialty-ophthalmology','5 · Augenarzt / Diabetes-Augen','◉'],['specialty-pneumology','6 · Pneumologie','♧'],['specialty-cardiology','7 · Kardiologie','♥']]],
  ['Messwerte & Gesundheit',[['glucose','Diabetes / Blutzucker / HbA1c','◆'],['urology','Prostata und PSA','◈'],['vital','Vital: Blutdruck, Puls, SpO₂ und PI','♥'],['weight','Gewicht / BMI','⚖'],['asthma','Asthma / Atmung','♧'],['labs','Laborwerte','⊕'],['symptoms','Symptomtagebuch · Mehrfachauswahl','☷']]],
  ['Originalbefunde & Kalender',[['documents','Originalbefunde / Scans','▤'],['reminders','Termine & Kontrollen','◷'],['hospital','Krankenhausaufenthalte','▤']]],
  ['Medikamente',[['meds','Medikamentenplan & Vorräte','✚'],['medlog','Einnahmen','◷']]],
@@ -1625,6 +1625,9 @@ async function saveWeightDedicated(form){
 async function handleSubmit(ev){const form=ev.target;if(!form.getAttribute('id')||!form.getAttribute('id').endsWith('-form'))return;ev.preventDefault();const f=new FormData(form);try{
 if(form.getAttribute('id')==='auth-form'){if(!canUseCrypto)throw Error('Keine sichere Verschlüsselung verfügbar.');const pass=f.get('password');const old=await getRec();if(!old){if(pass!==f.get('confirm'))throw Error('Passwörter stimmen nicht überein.');if(pass.length<10)throw Error('Passwort muss mindestens 10 Zeichen haben.');const salt=crypto.getRandomValues(new Uint8Array(16));key=await passKey(pass,salt);data=defaults();await putRec({salt:b64(salt),...await pack(data,key),modified:new Date().toISOString()})}else{key=await passKey(pass,unb64(old.salt));try{data=await unpack(old,key)}catch{key=null;throw Error('Passwort falsch oder gespeicherte Daten beschädigt.')}}migrateData();weightJournalReadOnly=false;try{await loadWeightJournal()}catch(err){weightJournalReadOnly=true;toast('ACHTUNG: Gewichtstagebuch unlesbar. Zum Datenschutz ist Speichern von Gewichten vorläufig gesperrt; keine Einträge wurden gelöscht.')}let weightRecovered=false;if(!weightJournalReadOnly){try{weightRecovered=await recoverWeightDraft()}catch(err){toast('Gewichtszwischensicherung konnte nicht wiederhergestellt werden. Bitte Speicherplatz prüfen.')}}common();if(weightRecovered)toast('Unterbrochene Gewichtsmessung wiederhergestellt.');return}
 if(!data)return;
+ if(form.id==='vk220-cardio-form'){
+  await window.VK220.saveFinding(f,data,save,id);renderMain();toast('Kardiologischer Befund verschlüsselt gespeichert.');return;
+ }
  if(form.id==='vk216-finding-form'||form.id==='vk216-appointment-form'){
    const specialty=String(f.get('specialty')||''),date=String(f.get('date')||''),doctor=String(f.get('doctor')||'').trim().slice(0,120);
    if(!window.VK216.SPECS[specialty]||!dateValid(date))throw Error('Fachrichtung oder Datum ungültig.');
